@@ -1,62 +1,36 @@
 ﻿const { app, BrowserWindow, Menu, shell } = require("electron");
-
-const FENIX_URL = "https://fenix-kick-app-production.up.railway.app";
+const path = require("path");
 
 let mainWindow = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1280,
+    width: 1366,
     height: 820,
-    minWidth: 1100,
+    minWidth: 1180,
     minHeight: 720,
     title: "Fenix Lurk",
-    backgroundColor: "#050505",
+    backgroundColor: "#07070a",
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      partition: "persist:fenix-kick-session"
+      webviewTag: true,
+      partition: "persist:fenix-lurk-session"
     }
   });
 
   Menu.setApplicationMenu(null);
 
-  mainWindow.loadURL(FENIX_URL);
+  mainWindow.loadFile(path.join(__dirname, "index.html"));
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (
-      url.startsWith("https://fenix-kick-app-production.up.railway.app") ||
-      url.includes("kick.com") ||
-      url.includes("id.kick.com")
-    ) {
+    if (url.includes("kick.com") || url.includes("id.kick.com")) {
       return { action: "allow" };
     }
 
     shell.openExternal(url);
     return { action: "deny" };
-  });
-
-  mainWindow.webContents.on("did-fail-load", () => {
-    const fallbackHtml = [
-      "<!doctype html>",
-      "<html>",
-      "<head>",
-      "<meta charset='utf-8'>",
-      "<title>Fenix Desktop</title>",
-      "</head>",
-      "<body style='margin:0;background:#050505;color:white;font-family:Arial;display:flex;align-items:center;justify-content:center;height:100vh;'>",
-      "<div style='max-width:520px;text-align:center;border:1px solid #ff7a00;border-radius:20px;padding:35px;background:#111;'>",
-      "<div style='font-size:60px;margin-bottom:15px;'>F</div>",
-      "<h1>Fenix Desktop</h1>",
-      "<p>Nao foi possivel carregar o painel online.</p>",
-      "<p style='color:#ffb36b;'>Confira sua internet ou se a Railway esta online.</p>",
-      "</div>",
-      "</body>",
-      "</html>"
-    ].join("");
-
-    mainWindow.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(fallbackHtml));
   });
 
   mainWindow.on("closed", () => {

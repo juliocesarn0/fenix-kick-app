@@ -1,0 +1,189 @@
+﻿<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self' https://kick.com https://www.kick.com https://id.kick.com https://fenix-kick-app-production.up.railway.app; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://fenix-kick-app-production.up.railway.app; img-src 'self' https: data:; frame-src https://kick.com https://www.kick.com https://id.kick.com;"
+  />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fenix Lurk</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">F</div>
+        <div>
+          <strong>FENIX LURK</strong>
+          <span>VIEWER</span>
+        </div>
+      </div>
+
+      <div class="profile">
+        <div class="profile-name" id="profileName">gokuumods</div>
+        <div class="profile-role">ESPECTADOR</div>
+      </div>
+
+      <div class="coins-box">
+        <div class="coin-icon">◎</div>
+        <div>
+          <strong id="coinValue">0</strong>
+          <span>Moedas</span>
+        </div>
+      </div>
+
+      <div class="meta-box">
+        <div class="meta-head">
+          <span>Meta de Horas</span>
+          <b id="hoursMeta">0h / 100h</b>
+        </div>
+        <div class="progress">
+          <div id="hoursBar"></div>
+        </div>
+      </div>
+
+      <div class="layout-box">
+        <p>LAYOUT DO GRID</p>
+        <div class="layout-buttons">
+          <button class="layout-btn active" data-layout="cols">Colunas</button>
+          <button class="layout-btn" data-layout="focus">Foco (1+2)</button>
+          <button class="layout-btn" data-layout="rows">Linhas</button>
+        </div>
+      </div>
+
+      <div class="notice">
+        <div class="notice-title">
+          <span>AVISO GERAL</span>
+          <b id="noticeCount">0</b>
+        </div>
+        <div id="noticeText">Nenhum aviso geral ainda.</div>
+      </div>
+
+      <div class="bottom-actions">
+        <label class="switch-row">
+          <input type="checkbox" id="startWithWindows" checked />
+          <span>Iniciar com o Windows</span>
+        </label>
+
+        <button class="clear-btn" id="clearCookiesBtn">Limpar Cookies de Login</button>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div class="left-top">
+          <button class="menu-btn">☰</button>
+          <div class="dot ok"></div>
+          <span>CONECTADO</span>
+          <div class="dot ok"></div>
+          <span>CONECTADO AO ADMIN</span>
+        </div>
+
+        <div class="right-top">
+          <div class="timer-pill" id="clockTimer">19:50</div>
+          <button class="top-btn" id="refreshScreensBtn">Atualizar Telas</button>
+          <button class="top-btn" id="muteAllBtn">Silenciar Tudo</button>
+          <button class="top-btn quality" id="qualityBtn">160p</button>
+          <button class="top-btn exit" id="exitBtn">Sair</button>
+        </div>
+      </header>
+
+      <div class="warning-bar" id="warningBar">
+        COMEÇAR A LIVE 5 MINUTOS ANTES DO SEU HORÁRIO PROGRAMADO NO FENIX LURK
+      </div>
+
+      <section class="viewer-grid cols" id="viewerGrid">
+        <div class="screen-card" id="card1">
+          <div class="screen-head">
+            <div>
+              <strong>TELA 1</strong>
+              <span id="slot1Label">Aguardando live</span>
+            </div>
+            <div class="screen-actions">
+              <button data-refresh="1">↻</button>
+              <button data-open="1">↗</button>
+            </div>
+          </div>
+
+          <div class="webview-wrap">
+            <webview id="view1" partition="persist:fenix-kick-session" allowpopups></webview>
+            <div class="maintenance" id="maint1">
+              <strong>TELA EM MANUTENÇÃO</strong>
+              <span>Aguardando canal agendado</span>
+            </div>
+          </div>
+
+          <div class="screen-foot">
+            <span id="slot1Status">Sem canal</span>
+            <span id="slot1Quality">160p</span>
+          </div>
+        </div>
+
+        <div class="screen-card" id="card2">
+          <div class="screen-head">
+            <div>
+              <strong>TELA 2</strong>
+              <span id="slot2Label">Aguardando live</span>
+            </div>
+            <div class="screen-actions">
+              <button data-refresh="2">↻</button>
+              <button data-open="2">↗</button>
+            </div>
+          </div>
+
+          <div class="webview-wrap">
+            <webview id="view2" partition="persist:fenix-kick-session" allowpopups></webview>
+            <div class="maintenance" id="maint2">
+              <strong>TELA EM MANUTENÇÃO</strong>
+              <span>Aguardando canal agendado</span>
+            </div>
+          </div>
+
+          <div class="screen-foot">
+            <span id="slot2Status">Sem canal</span>
+            <span id="slot2Quality">160p</span>
+          </div>
+        </div>
+
+        <div class="screen-card" id="card3">
+          <div class="screen-head">
+            <div>
+              <strong>TELA 3</strong>
+              <span id="slot3Label">Aguardando live</span>
+            </div>
+            <div class="screen-actions">
+              <button data-refresh="3">↻</button>
+              <button data-open="3">↗</button>
+            </div>
+          </div>
+
+          <div class="webview-wrap">
+            <webview id="view3" partition="persist:fenix-kick-session" allowpopups></webview>
+            <div class="maintenance" id="maint3">
+              <strong>TELA EM MANUTENÇÃO</strong>
+              <span>Aguardando canal agendado</span>
+            </div>
+          </div>
+
+          <div class="screen-foot">
+            <span id="slot3Status">Sem canal</span>
+            <span id="slot3Quality">160p</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="log-panel">
+        <div class="log-head">
+          <strong>LOG DO APP</strong>
+          <button id="clearLogBtn">Limpar</button>
+        </div>
+        <div id="logList"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="./renderer.js"></script>
+</body>
+</html>

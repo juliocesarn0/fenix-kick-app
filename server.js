@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import crypto from 'crypto';
+import fs from 'fs';
 import express from 'express';
 import session from 'express-session';
 import path from 'path';
@@ -283,6 +284,497 @@ app.get('/api/livestreams/stats', requireKickConfig, async (req, res) => {
     res.status(err.status || 500).json({ ok: false, message: err.message, details: err.data || null });
   }
 });
+
+
+
+// FENIX_LURK_CORE_API
+const FENIX_ADMIN_USER = 'GokuuMods';
+const FENIX_DATA_DIR = path.join(__dirname, 'backend', 'data');
+const FENIX_DATA_FILE = path.join(FENIX_DATA_DIR, 'fenix-data.json');
+
+fs.mkdirSync(FENIX_DATA_DIR, { recursive: true });
+
+function createDefaultFenixData() {
+  return {
+    users: [],
+    sessions: [],
+    schedule: [],
+    notices: [
+      {
+        id: crypto.randomUUID(),
+        message: 'COMEÇAR A LIVE 5 MINUTOS ANTES DO SEU HORARIO PROGRAMADO NO FENIX LURK',
+        active: true,
+        createdBy: FENIX_ADMIN_USER,
+        createdAt: new Date().toISOString()
+      }
+    ],
+    cycles: []
+  };
+}
+
+function readFenixData() {
+  try {
+    if (!fs.existsSync(FENIX_DATA_FILE)) {
+      const initial = createDefaultFenixData();
+      fs.writeFileSync(FENIX_DATA_FILE, JSON.stringify(initial, null, 2), 'utf8');
+      return initial;
+    }
+
+    const parsed = JSON.parse(fs.readFileSync(FENIX_DATA_FILE, 'utf8'));
+    return {
+      users: Array.isArray(parsed.users) ? parsed.users : [],
+      sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+      schedule: Array.isArray(parsed.schedule) ? parsed.schedule : [],
+      notices: Array.isArray(parsed.notices) ? parsed.notices : [],
+      cycles: Array.isArray(parsed.cycles) ? parsed.cycles : []
+    };
+  } catch (error) {
+    console.error('Erro lendo fenix-data.json:', error);
+    return createDefaultFenixData();
+  }
+}
+
+function writeFenixData(data) {
+  fs.writeFileSync(FENIX_DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+}
+
+function hashFenixPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  const hash = crypto.pbkdf2Sync(String(password || ''), salt, 120000, 64, 'sha512').toString('hex');
+  return salt + ':' + hash;
+}
+
+function verifyFenixPassword(password, saved) {
+  const [salt, hash] = String(saved || '').split(':');
+
+  if (!salt || !hash) return false;
+
+  const check = crypto.pbkdf2Sync(String(password || ''), salt, 120000, 64, 'sha512').toString('hex');
+
+  try {
+    return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(check, 'hex'));
+  } catch {
+    return false;
+  }
+}
+
+function normalizeFenixUsername(username) {
+  return String(username || '').trim();
+}
+
+function getFenixDateKey(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+function getFenixHourKey(date = new Date()) {
+  return String(date.getHours()).padStart(2, '0') + ':00';
+}
+
+function getCurrentFenixSlot(data, now = new Date()) {
+  const slotDate = getFenixDateKey(now);
+  const slotHour = getFenixHourKey(now);
+
+  const found = data.schedule.find((slot) => {
+    return slot.active !== false && slot.slotDate === slotDate && slot.slotHour === slotHour;
+  });
+
+  if (found) return found;
+
+  return {
+    id: 'maintenance-' + slotDate + '-' + slotHour,
+    slotDate,
+    slotHour,
+    active: true,
+    screen1Name: '',
+    screen1Url: '',
+    screen1Maintenance: true,
+    screen2Name: '',
+    screen2Url: '',
+    screen2Maintenance: true,
+    screen3Name: '',
+    screen3Url: '',
+    screen3Maintenance: true
+  };
+}
+
+function fenixSlotToDesktopSlots(slot) {
+  return [1, 2, 3].map((number) => {
+    const name = slot['screen' + number + 'Name'] || '';
+    const url = slot['screen' + number + 'Url'] || '';
+    const maintenance = Boolean(slot['screen' + number + 'Maintenance']);
+
+    return {
+      id: number,
+      title: 'Tela ' + number,
+      channel: name,
+      url,
+      active: !maintenance && Boolean(url || name),
+      maintenance
+    };
+  });
+}
+
+function requireFenixAdmin(req, res, next) {
+  const adminUsername =
+    req.headers['x-fenix-admin'] ||
+    req.body?.adminUsername ||
+    req.query?.adminUsername ||
+    '';
+
+  if (String(adminUsername).trim().toLowerCase() !== FENIX_ADMIN_USER.toLowerCase()) {
+    return res.status(403).json({
+      ok: false,
+      message: 'Painel Admin liberado somente para GokuuMods.'
+    });
+  }
+
+  next();
+}
+
+app.post('/api/fenix/auth/register-or-login', (req, res) => {
+  const username = normalizeFenixUsername(req.body?.username);
+  const password = String(req.body?.password || '');
+
+  if (!username || username.length < 3) {
+    return res.status(400).json({ ok: false, message: 'Username precisa ter pelo menos 3 caracteres.' });
+  }
+
+  if (!password || password.length < 3) {
+    return res.status(400).json({ ok: false, message: 'Senha precisa ter pelo menos 3 caracteres.' });
+  }
+
+  const data = readFenixData();
+  const now = new Date().toISOString();
+
+  let user = data.users.find((item) => item.username.toLowerCase() === username.toLowerCase());
+  let created = false;
+
+  if (!user) {
+    user = {
+      id: crypto.randomUUID(),
+      username,
+      passwordHash: hashFenixPassword(password),
+      role: username.toLowerCase() === FENIX_ADMIN_USER.toLowerCase() ? 'ADMIN' : 'USER',
+      points: 0,
+      weeklyPoints: 0,
+      totalMinutes: 0,
+      weeklyMinutes: 0,
+      kickLoggedIn: false,
+      isOnline: true,
+      lastSeenAt: now,
+      lastLoginAt: now,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    data.users.push(user);
+    created = true;
+  } else {
+    if (!verifyFenixPassword(password, user.passwordHash)) {
+      return res.status(401).json({ ok: false, message: 'Senha incorreta.' });
+    }
+
+    user.isOnline = true;
+    user.lastSeenAt = now;
+    user.lastLoginAt = now;
+    user.updatedAt = now;
+  }
+
+  const session = {
+    id: crypto.randomUUID(),
+    userId: user.id,
+    username: user.username,
+    sessionId: crypto.randomUUID(),
+    deviceId: String(req.body?.deviceId || crypto.randomUUID()),
+    appVersion: String(req.body?.appVersion || '1.0.0'),
+    kickLoggedIn: Boolean(user.kickLoggedIn),
+    active: true,
+    startedAt: now,
+    lastSeenAt: now
+  };
+
+  data.sessions = data.sessions.filter((item) => !(item.userId === user.id && item.deviceId === session.deviceId));
+  data.sessions.push(session);
+
+  writeFenixData(data);
+
+  res.json({
+    ok: true,
+    created,
+    sessionId: session.sessionId,
+    user: {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      isAdmin: user.role === 'ADMIN',
+      points: user.points,
+      weeklyPoints: user.weeklyPoints,
+      totalMinutes: user.totalMinutes,
+      weeklyMinutes: user.weeklyMinutes,
+      kickLoggedIn: user.kickLoggedIn
+    }
+  });
+});
+
+app.post('/api/fenix/app/heartbeat', (req, res) => {
+  const sessionId = String(req.body?.sessionId || '').trim();
+  const kickLoggedIn = Boolean(req.body?.kickLoggedIn);
+
+  const data = readFenixData();
+  const now = new Date().toISOString();
+
+  const session = data.sessions.find((item) => item.sessionId === sessionId && item.active !== false);
+
+  if (!session) {
+    return res.status(401).json({ ok: false, message: 'Sessao Fenix invalida.' });
+  }
+
+  const user = data.users.find((item) => item.id === session.userId);
+
+  if (!user) {
+    return res.status(404).json({ ok: false, message: 'Usuario Fenix nao encontrado.' });
+  }
+
+  session.lastSeenAt = now;
+  session.kickLoggedIn = kickLoggedIn;
+
+  user.isOnline = true;
+  user.lastSeenAt = now;
+  user.kickLoggedIn = kickLoggedIn;
+  user.updatedAt = now;
+
+  writeFenixData(data);
+
+  res.json({
+    ok: true,
+    user: {
+      username: user.username,
+      role: user.role,
+      isAdmin: user.role === 'ADMIN',
+      points: user.points,
+      weeklyPoints: user.weeklyPoints,
+      totalMinutes: user.totalMinutes,
+      weeklyMinutes: user.weeklyMinutes,
+      kickLoggedIn: user.kickLoggedIn
+    }
+  });
+});
+
+app.get('/api/fenix/app/current-schedule', (req, res) => {
+  const data = readFenixData();
+  const slot = getCurrentFenixSlot(data);
+  const notice = data.notices.find((item) => item.active !== false) || null;
+
+  res.json({
+    ok: true,
+    slot,
+    slots: fenixSlotToDesktopSlots(slot),
+    notice
+  });
+});
+
+app.get('/api/fenix-desktop-slots', (req, res) => {
+  const data = readFenixData();
+  const slot = getCurrentFenixSlot(data);
+
+  res.json({
+    ok: true,
+    slots: fenixSlotToDesktopSlots(slot)
+  });
+});
+
+app.post('/api/fenix/app/complete-cycle', (req, res) => {
+  const sessionId = String(req.body?.sessionId || '').trim();
+  const cycleKey = String(req.body?.cycleKey || '').trim();
+  const kickLoggedIn = Boolean(req.body?.kickLoggedIn);
+
+  if (!sessionId || !cycleKey) {
+    return res.status(400).json({ ok: false, message: 'sessionId e cycleKey sao obrigatorios.' });
+  }
+
+  const data = readFenixData();
+  const session = data.sessions.find((item) => item.sessionId === sessionId && item.active !== false);
+
+  if (!session) {
+    return res.status(401).json({ ok: false, message: 'Sessao Fenix invalida.' });
+  }
+
+  const user = data.users.find((item) => item.id === session.userId);
+
+  if (!user) {
+    return res.status(404).json({ ok: false, message: 'Usuario Fenix nao encontrado.' });
+  }
+
+  if (!kickLoggedIn && !session.kickLoggedIn && !user.kickLoggedIn) {
+    return res.status(403).json({
+      ok: false,
+      paid: false,
+      message: 'Kick nao logada nas telas. Pontos nao contabilizados.'
+    });
+  }
+
+  const alreadyPaid = data.cycles.find((item) => item.userId === user.id && item.cycleKey === cycleKey);
+
+  if (alreadyPaid) {
+    return res.json({
+      ok: true,
+      paid: false,
+      duplicated: true,
+      points: 0,
+      user
+    });
+  }
+
+  const slot = getCurrentFenixSlot(data);
+  const desktopSlots = fenixSlotToDesktopSlots(slot);
+  const activeScreens = desktopSlots.filter((item) => item.active).length;
+  const points = activeScreens * 10;
+
+  const now = new Date().toISOString();
+
+  const cycle = {
+    id: crypto.randomUUID(),
+    userId: user.id,
+    username: user.username,
+    sessionId,
+    cycleKey,
+    points,
+    minutes: 10,
+    activeScreens,
+    slotDate: slot.slotDate,
+    slotHour: slot.slotHour,
+    createdAt: now
+  };
+
+  data.cycles.push(cycle);
+
+  user.points += points;
+  user.weeklyPoints += points;
+  user.totalMinutes += 10;
+  user.weeklyMinutes += 10;
+  user.isOnline = true;
+  user.lastSeenAt = now;
+  user.updatedAt = now;
+
+  session.lastSeenAt = now;
+  session.kickLoggedIn = true;
+
+  writeFenixData(data);
+
+  res.json({
+    ok: true,
+    paid: true,
+    points,
+    activeScreens,
+    user: {
+      username: user.username,
+      role: user.role,
+      isAdmin: user.role === 'ADMIN',
+      points: user.points,
+      weeklyPoints: user.weeklyPoints,
+      totalMinutes: user.totalMinutes,
+      weeklyMinutes: user.weeklyMinutes,
+      kickLoggedIn: user.kickLoggedIn
+    }
+  });
+});
+
+app.get('/api/fenix/admin/online-users', requireFenixAdmin, (req, res) => {
+  const data = readFenixData();
+  const limitDate = Date.now() - 1000 * 60 * 2;
+
+  const users = data.users.map((user) => {
+    const lastSeen = user.lastSeenAt ? new Date(user.lastSeenAt).getTime() : 0;
+
+    return {
+      username: user.username,
+      role: user.role,
+      isOnline: user.isOnline && lastSeen >= limitDate,
+      kickLoggedIn: user.kickLoggedIn,
+      points: user.points,
+      weeklyPoints: user.weeklyPoints,
+      totalMinutes: user.totalMinutes,
+      weeklyMinutes: user.weeklyMinutes,
+      lastSeenAt: user.lastSeenAt
+    };
+  });
+
+  res.json({ ok: true, users });
+});
+
+app.get('/api/fenix/admin/schedule', requireFenixAdmin, (req, res) => {
+  const data = readFenixData();
+  res.json({ ok: true, schedule: data.schedule });
+});
+
+app.post('/api/fenix/admin/schedule', requireFenixAdmin, (req, res) => {
+  const data = readFenixData();
+
+  const slotDate = String(req.body?.slotDate || getFenixDateKey()).trim();
+  const slotHour = String(req.body?.slotHour || getFenixHourKey()).trim();
+
+  let slot = data.schedule.find((item) => item.slotDate === slotDate && item.slotHour === slotHour);
+
+  if (!slot) {
+    slot = {
+      id: crypto.randomUUID(),
+      slotDate,
+      slotHour,
+      createdBy: FENIX_ADMIN_USER,
+      createdAt: new Date().toISOString()
+    };
+
+    data.schedule.push(slot);
+  }
+
+  slot.screen1Name = String(req.body?.screen1Name || '').trim();
+  slot.screen1Url = String(req.body?.screen1Url || '').trim();
+  slot.screen1Maintenance = Boolean(req.body?.screen1Maintenance);
+
+  slot.screen2Name = String(req.body?.screen2Name || '').trim();
+  slot.screen2Url = String(req.body?.screen2Url || '').trim();
+  slot.screen2Maintenance = Boolean(req.body?.screen2Maintenance);
+
+  slot.screen3Name = String(req.body?.screen3Name || '').trim();
+  slot.screen3Url = String(req.body?.screen3Url || '').trim();
+  slot.screen3Maintenance = Boolean(req.body?.screen3Maintenance);
+
+  slot.active = req.body?.active !== false;
+  slot.updatedAt = new Date().toISOString();
+
+  writeFenixData(data);
+
+  res.json({ ok: true, slot });
+});
+
+app.post('/api/fenix/admin/notice', requireFenixAdmin, (req, res) => {
+  const data = readFenixData();
+
+  const message = String(req.body?.message || '').trim();
+
+  if (!message) {
+    return res.status(400).json({ ok: false, message: 'Aviso nao informado.' });
+  }
+
+  data.notices.forEach((notice) => {
+    notice.active = false;
+  });
+
+  const notice = {
+    id: crypto.randomUUID(),
+    message,
+    active: true,
+    createdBy: FENIX_ADMIN_USER,
+    createdAt: new Date().toISOString()
+  };
+
+  data.notices.unshift(notice);
+
+  writeFenixData(data);
+
+  res.json({ ok: true, notice });
+});
+// FIM_FENIX_LURK_CORE_API
+
 
 app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
