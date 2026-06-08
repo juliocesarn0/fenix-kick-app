@@ -22,12 +22,14 @@ const KICK_API_URL = 'https://api.kick.com/public/v1';
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.set('trust proxy', 1);
 app.use(
   session({
     name: 'fenix.sid',
     secret: process.env.SESSION_SECRET || 'fenix-dev-secret-change-me',
     resave: false,
-    saveUninitialized: false,
+    saveUninitialized: true,
+    proxy: true,
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
