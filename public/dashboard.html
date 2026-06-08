@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fenix Dashboard</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="dashboard">
+    <aside class="sidebar">
+      <div class="logo-row"><div class="brand-mark small">F</div><strong>Fenix</strong></div>
+      <a class="nav active" href="/dashboard.html">Dashboard</a>
+      <a class="nav" href="/">Login</a>
+      <button id="logoutBtn" class="nav danger">Sair</button>
+    </aside>
+
+    <section class="content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Dashboard</p>
+          <h1>Central Fenix</h1>
+        </div>
+        <div id="loginStatus" class="pill">Verificando...</div>
+      </header>
+
+      <section class="grid cards3">
+        <article class="card">
+          <span class="card-icon">⚡</span>
+          <p class="muted">Kick</p>
+          <h2 id="kickUser">Nao conectado</h2>
+          <p id="kickSlug" class="muted">Entre com sua conta Kick.</p>
+        </article>
+        <article class="card">
+          <span class="card-icon">📺</span>
+          <p class="muted">Status da live</p>
+          <h2 id="liveStatus">---</h2>
+          <p id="viewerCount" class="muted">---</p>
+        </article>
+        <article class="card">
+          <span class="card-icon">🔥</span>
+          <p class="muted">Total ao vivo</p>
+          <h2 id="totalLive">---</h2>
+          <p class="muted">Dados publicos da Kick.</p>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Buscar canal</p>
+            <h2>Consultar canal Kick</h2>
+          </div>
+          <button id="refreshBtn" class="btn primary">Atualizar meus dados</button>
+        </div>
+
+        <div class="search-row">
+          <input id="slugInput" placeholder="ex: gokuumods" />
+          <button id="searchBtn" class="btn">Buscar</button>
+        </div>
+
+        <div id="channelResult" class="result-box">Digite um slug para consultar.</div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Lives</p>
+            <h2>Top lives publicas</h2>
+          </div>
+          <button id="loadLivesBtn" class="btn">Carregar lives</button>
+        </div>
+        <div id="livesList" class="live-list">Clique em carregar lives.</div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

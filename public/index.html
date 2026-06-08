@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fenix</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="page login-page">
+    <section class="hero-card">
+      <div class="brand-mark">F</div>
+      <p class="eyebrow">Fenix App</p>
+      <h1>Painel Kick online</h1>
+      <p class="muted">Base propria pronta para Railway. Conecte sua API da Kick e veja canal, live, status e dados publicos.</p>
+
+      <div id="statusBox" class="status-box">Carregando configuracao...</div>
+
+      <div class="actions">
+        <a class="btn primary" href="/auth/kick">Entrar com Kick</a>
+        <a class="btn ghost" href="/dashboard.html">Abrir dashboard</a>
+      </div>
+
+      <div class="note">
+        Redirect configurado: <code id="redirectUri">...</code>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    async function loadConfig() {
+      const box = document.getElementById('statusBox');
+      const redirect = document.getElementById('redirectUri');
+      try {
+        const res = await fetch('/api/config');
+        const data = await res.json();
+        redirect.textContent = data.redirectUri;
+        box.className = 'status-box ' + (data.kickConfigured ? 'ok' : 'warn');
+        box.innerHTML = data.kickConfigured
+          ? 'API Kick configurada. Pode fazer login.'
+          : 'Falta configurar KICK_CLIENT_ID e KICK_CLIENT_SECRET.';
+      } catch (e) {
+        box.className = 'status-box warn';
+        box.textContent = 'Nao consegui carregar a configuracao.';
+      }
+    }
+    loadConfig();
+  </script>
+</body>
+</html>
