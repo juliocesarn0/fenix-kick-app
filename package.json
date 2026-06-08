@@ -2,18 +2,45 @@
   "name": "fenix-kick-app",
   "version": "1.0.0",
   "description": "Fenix - painel Kick API pronto para Railway",
-  "main": "server.js",
+  "main": "desktop/main.cjs",
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "desktop": "electron .",
+    "build:desktop": "electron-builder --win --x64"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "express-session": "^1.18.0",
-    "dotenv": "^16.4.5"
+    "express-session": "^1.18.0"
+  },
+  "devDependencies": {
+    "electron": "^37.0.0",
+    "electron-builder": "^26.15.2"
+  },
+  "build": {
+    "appId": "com.fenix.lurk",
+    "productName": "Fenix Lurk",
+    "directories": {
+      "output": "dist-desktop"
+    },
+    "files": [
+      "desktop/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Fenix Lurk"
+    }
   }
 }
