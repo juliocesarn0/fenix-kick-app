@@ -361,12 +361,34 @@ function normalizeFenixUsername(username) {
   return String(username || '').trim();
 }
 
+function getBrazilParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false
+  }).formatToParts(date);
+
+  const get = (type) => parts.find((part) => part.type === type)?.value || '';
+
+  return {
+    year: get('year'),
+    month: get('month'),
+    day: get('day'),
+    hour: get('hour')
+  };
+}
+
 function getFenixDateKey(date = new Date()) {
-  return date.toISOString().slice(0, 10);
+  const parts = getBrazilParts(date);
+  return parts.year + '-' + parts.month + '-' + parts.day;
 }
 
 function getFenixHourKey(date = new Date()) {
-  return String(date.getHours()).padStart(2, '0') + ':00';
+  const parts = getBrazilParts(date);
+  return String(parts.hour || '00').padStart(2, '0') + ':00';
 }
 
 function getCurrentFenixSlot(data, now = new Date()) {
@@ -745,6 +767,94 @@ app.post('/api/fenix/admin/schedule', requireFenixAdmin, (req, res) => {
 
   res.json({ ok: true, slot });
 });
+
+
+
+app.post('/api/fenix/admin/schedule/bulk', requireFenixAdmin, (req, res) => {
+  const data = readFenixData();
+
+  const startDate = String(req.body?.startDate || getFenixDateKey()).trim();
+  const days = Math.max(1, Math.min(7, Number(req.body?.days || 1)));
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+
+  if (!rows.length) {
+    return res.status(400).json({ ok: false, message: 'Nenhuma linha de grade enviada.' });
+  }
+
+  function addDays(dateText, amount) {
+    const date = new Date(dateText + 'T12:00:00');
+    date.setDate(date.getDate() + amount);
+    return date.toISOString().slice(0, 10);
+  }
+
+  function buildUrl(name) {
+    const value = String(name || '').trim();
+
+    if (!value || value === '-') return '';
+
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+
+    return 'https://kick.com/' + value.replace(/^@/, '');
+  }
+
+  let saved = 0;
+
+  for (let dayIndex = 0; dayIndex < days; dayIndex++) {
+    const slotDate = addDays(startDate, dayIndex);
+
+    for (const row of rows) {
+      const slotHour = String(row.slotHour || '').trim();
+      if (!/^\d{2}:00$/.test(slotHour)) continue;
+
+      const screen1Name = String(row.screen1Name || '').trim();
+      const screen2Name = String(row.screen2Name || '').trim();
+      const screen3Name = String(row.screen3Name || '').trim();
+
+      let slot = data.schedule.find((item) => item.slotDate === slotDate && item.slotHour === slotHour);
+
+      if (!slot) {
+        slot = {
+          id: crypto.randomUUID(),
+          slotDate,
+          slotHour,
+          createdBy: FENIX_ADMIN_USER,
+          createdAt: new Date().toISOString()
+        };
+
+        data.schedule.push(slot);
+      }
+
+      slot.screen1Name = screen1Name === '-' ? '' : screen1Name;
+      slot.screen1Url = buildUrl(screen1Name);
+      slot.screen1Maintenance = !slot.screen1Url;
+
+      slot.screen2Name = screen2Name === '-' ? '' : screen2Name;
+      slot.screen2Url = buildUrl(screen2Name);
+      slot.screen2Maintenance = !slot.screen2Url;
+
+      slot.screen3Name = screen3Name === '-' ? '' : screen3Name;
+      slot.screen3Url = buildUrl(screen3Name);
+      slot.screen3Maintenance = !slot.screen3Url;
+
+      slot.active = true;
+      slot.updatedAt = new Date().toISOString();
+
+      saved++;
+    }
+  }
+
+  writeFenixData(data);
+
+  res.json({
+    ok: true,
+    saved,
+    days,
+    startDate
+  });
+});
+// FENIX_ADMIN_BULK_SCHEDULE_API
 
 app.post('/api/fenix/admin/notice', requireFenixAdmin, (req, res) => {
   const data = readFenixData();

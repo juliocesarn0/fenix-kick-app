@@ -11,6 +11,7 @@ function createWindow() {
     minHeight: 720,
     title: "Fenix Lurk",
     backgroundColor: "#07070a",
+    show: false,
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
@@ -23,6 +24,12 @@ function createWindow() {
   Menu.setApplicationMenu(null);
 
   mainWindow.loadFile(path.join(__dirname, "index.html"));
+
+  // FENIX_MAXIMIZAR_JANELA
+  mainWindow.once("ready-to-show", () => {
+    mainWindow.maximize();
+    mainWindow.show();
+  });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.includes("kick.com") || url.includes("id.kick.com")) {

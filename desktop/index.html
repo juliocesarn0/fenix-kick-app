@@ -11,7 +11,22 @@
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <div class="app">
+  <div id="loginGate" class="login-gate">
+    <div class="login-card">
+      <div class="login-logo">F</div>
+      <h1>Fenix Lurk</h1>
+      <p>Crie sua conta ou entre usando seu username e senha.</p>
+
+      <input id="loginUsername" type="text" placeholder="Username Fenix" autocomplete="username" />
+      <input id="loginPassword" type="password" placeholder="Senha" autocomplete="current-password" />
+
+      <button id="loginButton" type="button">Entrar / Criar Conta</button>
+
+      <div id="loginMessage" class="login-message"></div>
+    </div>
+  </div>
+
+  <div class="app hidden" id="mainApp">
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-mark">F</div>
@@ -61,6 +76,10 @@
         <div id="noticeText">Nenhum aviso geral ainda.</div>
       </div>
 
+      <button class="admin-panel-btn hidden" id="adminPanelBtn" type="button">
+        Painel Admin
+      </button>
+
       <div class="bottom-actions">
         <label class="switch-row">
           <input type="checkbox" id="startWithWindows" checked />
@@ -75,10 +94,10 @@
       <header class="topbar">
         <div class="left-top">
           <button class="menu-btn">☰</button>
-          <div class="dot ok"></div>
-          <span>CONECTADO</span>
-          <div class="dot ok"></div>
-          <span>CONECTADO AO ADMIN</span>
+          <div class="dot ok" id="fenixDot"></div>
+          <span id="fenixStatusText">FENIX CONECTADO</span>
+          <div class="dot danger" id="kickDot"></div>
+          <span id="kickStatusText">KICK NAO LOGADA</span>
         </div>
 
         <div class="right-top">
@@ -176,12 +195,140 @@
 
       <section class="log-panel">
         <div class="log-head">
-          <strong>LOG DO APP</strong>
+          <strong>LOG DO APP</strong><span id="cycleInfo">Ciclo: aguardando login</span>
           <button id="clearLogBtn">Limpar</button>
         </div>
         <div id="logList"></div>
       </section>
     </main>
+  </div>
+
+  <div class="admin-modal hidden" id="adminModal">
+    <div class="admin-card">
+      <div class="admin-head">
+        <div>
+          <strong>Painel Admin Fenix</strong>
+          <span>Somente GokuuMods</span>
+        </div>
+        <button id="closeAdminBtn" type="button">Fechar</button>
+      </div>
+
+      <div class="admin-grid">
+        <section class="admin-section">
+          <h3>Usuários Online</h3>
+          <div id="adminUsersList" class="admin-users-list">
+            Carregando...
+          </div>
+        </section>
+
+        <section class="admin-section">
+          <h3>Grade da Hora</h3>
+
+          <div class="admin-form-row">
+            <label>Data</label>
+            <input id="adminSlotDate" type="date" />
+          </div>
+
+          <div class="admin-form-row">
+            <label>Hora</label>
+            <select id="adminSlotHour">
+              <option value="00:00">00:00</option>
+              <option value="01:00">01:00</option>
+              <option value="02:00">02:00</option>
+              <option value="03:00">03:00</option>
+              <option value="04:00">04:00</option>
+              <option value="05:00">05:00</option>
+              <option value="06:00">06:00</option>
+              <option value="07:00">07:00</option>
+              <option value="08:00">08:00</option>
+              <option value="09:00">09:00</option>
+              <option value="10:00">10:00</option>
+              <option value="11:00">11:00</option>
+              <option value="12:00">12:00</option>
+              <option value="13:00">13:00</option>
+              <option value="14:00">14:00</option>
+              <option value="15:00">15:00</option>
+              <option value="16:00">16:00</option>
+              <option value="17:00">17:00</option>
+              <option value="18:00">18:00</option>
+              <option value="19:00">19:00</option>
+              <option value="20:00">20:00</option>
+              <option value="21:00">21:00</option>
+              <option value="22:00">22:00</option>
+              <option value="23:00">23:00</option>
+            </select>
+          </div>
+
+          <div class="admin-screen-box">
+            <strong>Tela 1</strong>
+            <input id="adminScreen1Name" placeholder="Canal ou nome" />
+            <input id="adminScreen1Url" placeholder="https://kick.com/canal" />
+            <label><input id="adminScreen1Maintenance" type="checkbox" /> Manutenção</label>
+          </div>
+
+          <div class="admin-screen-box">
+            <strong>Tela 2</strong>
+            <input id="adminScreen2Name" placeholder="Canal ou nome" />
+            <input id="adminScreen2Url" placeholder="https://kick.com/canal" />
+            <label><input id="adminScreen2Maintenance" type="checkbox" /> Manutenção</label>
+          </div>
+
+          <div class="admin-screen-box">
+            <strong>Tela 3</strong>
+            <input id="adminScreen3Name" placeholder="Canal ou nome" />
+            <input id="adminScreen3Url" placeholder="https://kick.com/canal" />
+            <label><input id="adminScreen3Maintenance" type="checkbox" /> Manutenção</label>
+          </div>
+
+          <button id="saveAdminScheduleBtn" class="admin-save-btn" type="button">
+            Salvar Grade
+          </button>
+        </section>
+
+        <section class="admin-section admin-bulk-section">
+          <h3>Grade Rápida</h3>
+
+          <div class="bulk-grid-top">
+            <div class="admin-form-row">
+              <label>Data inicial</label>
+              <input id="bulkStartDate" type="date" />
+            </div>
+
+            <div class="admin-form-row">
+              <label>Quantidade de dias</label>
+              <select id="bulkDays">
+                <option value="1">1 dia</option>
+                <option value="2">2 dias</option>
+                <option value="3">3 dias</option>
+                <option value="4">4 dias</option>
+                <option value="5">5 dias</option>
+                <option value="6">6 dias</option>
+                <option value="7">7 dias / semana toda</option>
+              </select>
+            </div>
+          </div>
+
+          <p class="bulk-help">
+            Formato: <b>HORA TELA1 TELA2 TELA3</b>. Use <b>-</b> para deixar a tela em manutenção.
+          </p>
+
+          <textarea id="bulkScheduleText" placeholder="08:00 gokuumods canal2 canal3&#10;09:00 canal4 canal5 -&#10;10:00 - canal6 canal7"></textarea>
+
+          <div class="bulk-actions">
+            <button id="fillBulkExampleBtn" class="admin-save-btn" type="button">Preencher exemplo</button>
+            <button id="saveBulkScheduleBtn" class="admin-save-btn" type="button">Salvar Grade Rápida</button>
+          </div>
+        </section>
+
+        <section class="admin-section admin-notice-section">
+          <h3>Aviso Geral</h3>
+          <textarea id="adminNoticeText" placeholder="Mensagem que aparece no topo do app"></textarea>
+          <button id="saveAdminNoticeBtn" class="admin-save-btn" type="button">
+            Salvar Aviso
+          </button>
+        </section>
+      </div>
+    </div>
   </div>
 
   <script src="./renderer.js"></script>
