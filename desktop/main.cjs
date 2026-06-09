@@ -143,3 +143,38 @@ ipcMain.handle("fenix:open-external", async (event, url) => {
 
   return false;
 });
+
+
+
+
+// FENIX_CLEAR_ALL_ACCESS_IPC
+ipcMain.handle("fenix:clear-all-access", async () => {
+  const sessionsToClear = [
+    session.defaultSession,
+    session.fromPartition("persist:fenix-lurk-session"),
+    session.fromPartition("persist:fenix-kick-session"),
+    session.fromPartition("persist:kick"),
+    session.fromPartition("persist:default")
+  ];
+
+  for (const ses of sessionsToClear) {
+    try {
+      await ses.clearStorageData({
+        storages: [
+          "cookies",
+          "localstorage",
+          "indexdb",
+          "serviceworkers",
+          "cachestorage",
+          "shadercache"
+        ]
+      });
+    } catch {}
+
+    try {
+      await ses.clearCache();
+    } catch {}
+  }
+
+  return { ok: true };
+});

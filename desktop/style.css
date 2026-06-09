@@ -1019,3 +1019,56 @@ button[title="Admin"] {
   display: none !important;
 }
 
+
+
+/* FENIX_TABS_LOGIN_NOTICE_FINAL */
+.fenix-tabs-login-notice {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.fenix-tabs-login-box {
+  width: min(440px, calc(100vw - 40px));
+  border: 1px solid rgba(245, 178, 42, 0.85);
+  border-radius: 18px;
+  background: #080b12;
+  padding: 24px;
+  text-align: center;
+  box-shadow: 0 0 40px rgba(245, 178, 42, 0.18);
+}
+
+.fenix-tabs-login-box h2 {
+  margin: 0 0 10px;
+  color: #f5b22a;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.fenix-tabs-login-box p {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.45;
+  margin: 8px 0;
+}
+
+.fenix-tabs-login-box button {
+  margin-top: 14px;
+  width: 100%;
+  border: 1px solid rgba(0, 255, 106, 0.8);
+  border-radius: 12px;
+  background: rgba(0, 255, 106, 0.16);
+  color: #ffffff;
+  padding: 12px 16px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.fenix-tabs-login-box button:hover {
+  background: rgba(0, 255, 106, 0.28);
+}
