@@ -290,6 +290,7 @@ app.get('/api/livestreams/stats', requireKickConfig, async (req, res) => {
 // FENIX_LURK_CORE_API
 const FENIX_ADMIN_USER = 'GokuuMods';
 const FENIX_ADMIN_SECRET = process.env.FENIX_ADMIN_SECRET || '';
+const FENIX_MIN_CYCLE_INTERVAL_MS = Number(process.env.FENIX_MIN_CYCLE_INTERVAL_MS || 1000 * 60 * 9);
 const FENIX_DATA_DIR = path.join(__dirname, 'backend', 'data');
 const FENIX_DATA_FILE = path.join(FENIX_DATA_DIR, 'fenix-data.json');
 
@@ -597,6 +598,31 @@ app.post('/api/fenix/app/heartbeat', (req, res) => {
 
 app.get('/api/fenix/app/current-schedule', (req, res) => {
   const data = readFenixData();
+  const lastCycleForUser = data.cycles
+    .filter((cycle) => String(cycle.userId || '') === String(user.id))
+    .map((cycle) => {
+      return {
+        createdAt: cycle.createdAt,
+        time: cycle.createdAt ? new Date(cycle.createdAt).getTime() : 0
+      };
+    })
+    .filter((cycle) => Number.isFinite(cycle.time) && cycle.time > 0)
+    .sort((a, b) => b.time - a.time)[0] || null;
+
+  if (lastCycleForUser) {
+    const elapsedMs = Date.now() - lastCycleForUser.time;
+
+    if (elapsedMs < FENIX_MIN_CYCLE_INTERVAL_MS) {
+      const waitSeconds = Math.ceil((FENIX_MIN_CYCLE_INTERVAL_MS - elapsedMs) / 1000);
+
+      return res.status(429).json({
+        ok: false,
+        message: 'Ciclo ainda nao liberado. Aguarde o tempo minimo.',
+        waitSeconds
+      });
+    }
+  }
+
   const slot = getCurrentFenixSlot(data);
   const notice = data.notices.find((item) => item.active !== false) || null;
 
@@ -610,6 +636,31 @@ app.get('/api/fenix/app/current-schedule', (req, res) => {
 
 app.get('/api/fenix-desktop-slots', (req, res) => {
   const data = readFenixData();
+  const lastCycleForUser = data.cycles
+    .filter((cycle) => String(cycle.userId || '') === String(user.id))
+    .map((cycle) => {
+      return {
+        createdAt: cycle.createdAt,
+        time: cycle.createdAt ? new Date(cycle.createdAt).getTime() : 0
+      };
+    })
+    .filter((cycle) => Number.isFinite(cycle.time) && cycle.time > 0)
+    .sort((a, b) => b.time - a.time)[0] || null;
+
+  if (lastCycleForUser) {
+    const elapsedMs = Date.now() - lastCycleForUser.time;
+
+    if (elapsedMs < FENIX_MIN_CYCLE_INTERVAL_MS) {
+      const waitSeconds = Math.ceil((FENIX_MIN_CYCLE_INTERVAL_MS - elapsedMs) / 1000);
+
+      return res.status(429).json({
+        ok: false,
+        message: 'Ciclo ainda nao liberado. Aguarde o tempo minimo.',
+        waitSeconds
+      });
+    }
+  }
+
   const slot = getCurrentFenixSlot(data);
 
   res.json({
@@ -658,6 +709,31 @@ app.post('/api/fenix/app/complete-cycle', (req, res) => {
       points: 0,
       user
     });
+  }
+
+  const lastCycleForUser = data.cycles
+    .filter((cycle) => String(cycle.userId || '') === String(user.id))
+    .map((cycle) => {
+      return {
+        createdAt: cycle.createdAt,
+        time: cycle.createdAt ? new Date(cycle.createdAt).getTime() : 0
+      };
+    })
+    .filter((cycle) => Number.isFinite(cycle.time) && cycle.time > 0)
+    .sort((a, b) => b.time - a.time)[0] || null;
+
+  if (lastCycleForUser) {
+    const elapsedMs = Date.now() - lastCycleForUser.time;
+
+    if (elapsedMs < FENIX_MIN_CYCLE_INTERVAL_MS) {
+      const waitSeconds = Math.ceil((FENIX_MIN_CYCLE_INTERVAL_MS - elapsedMs) / 1000);
+
+      return res.status(429).json({
+        ok: false,
+        message: 'Ciclo ainda nao liberado. Aguarde o tempo minimo.',
+        waitSeconds
+      });
+    }
   }
 
   const slot = getCurrentFenixSlot(data);
@@ -950,6 +1026,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
