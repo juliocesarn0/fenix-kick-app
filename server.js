@@ -650,54 +650,6 @@ app.post('/api/fenix/auth/register-or-login', (req, res) => {
   });
 });
 
-app.post('/api/fenix/app/heartbeat', (req, res) => {
-  const sessionId = String(req.body?.sessionId || '').trim();
-  const kickLoggedIn = Boolean(req.body?.kickLoggedIn);
-  const tabsKickLoggedIn = Boolean(req.body?.tabsKickLoggedIn);
-
-  const data = readFenixData();
-  const now = new Date().toISOString();
-
-  const session = data.sessions.find((item) => item.sessionId === sessionId && item.active !== false);
-
-  if (!session) {
-    return res.status(401).json({ ok: false, message: 'Sessao Fenix invalida.' });
-  }
-
-  const user = data.users.find((item) => item.id === session.userId);
-
-  if (!user) {
-    return res.status(404).json({ ok: false, message: 'Usuario Fenix nao encontrado.' });
-  }
-
-  session.lastSeenAt = now;
-  session.kickLoggedIn = kickLoggedIn;
-
-  user.isOnline = true;
-  user.lastSeenAt = now;
-  user.kickLoggedIn = kickLoggedIn;
-  user.updatedAt = now;
-
-  writeFenixData(data);
-
-  res.json({
-    ok: true,
-    user: {
-      username: user.username,
-      role: user.role,
-      isAdmin: user.role === 'ADMIN',
-      points: user.points,
-      weeklyPoints: user.weeklyPoints,
-      totalMinutes: user.totalMinutes,
-      weeklyMinutes: user.weeklyMinutes,
-      kickLoggedIn: user.kickLoggedIn,
-      kickConnected: Boolean(user.kickConnected),
-      kickUsername: user.kickUsername || ''
-    }
-  });
-});
-
-
 // FENIX_KICK_OAUTH_ROUTES
 app.get('/api/fenix/kick/connect-url', (req, res) => {
   const sessionId = String(req.query?.sessionId || '').trim();
