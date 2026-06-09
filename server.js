@@ -812,7 +812,39 @@ app.get('/api/fenix/kick/callback', async (req, res) => {
 
     const kickUser = safeKickUserPayload(kickUserData);
 
-    user.kickConnected = true;
+    
+  // FENIX_ONE_KICK_ONE_FENIX_FINAL
+  data.users = Array.isArray(data.users) ? data.users : [];
+
+  const kickIdToLock = String(kickUser.id || kickUser.userId || kickUser.kickUserId || '').trim();
+  const kickNameToLock = String(kickUser.username || kickUser.slug || kickUser.name || '').trim();
+
+  const otherUserWithThisKick = data.users.find((item) => {
+    if (!item || item.id === user.id) return false;
+
+    const itemKickId = String(item.kickUserId || item.kickId || '').trim();
+    const itemKickName = String(item.kickUsername || item.kickName || '').trim().toLowerCase();
+
+    return (
+      (kickIdToLock && itemKickId && itemKickId === kickIdToLock) ||
+      (kickNameToLock && itemKickName && itemKickName === kickNameToLock.toLowerCase())
+    );
+  });
+
+  if (otherUserWithThisKick) {
+    return res.status(403).send(`
+      <html>
+        <body style="font-family:Arial;background:#080b12;color:#fff;text-align:center;padding:40px">
+          <h1 style="color:#ff4d4d">Kick ja vinculada</h1>
+          <p>Essa conta Kick ja esta vinculada em outra conta Fenix.</p>
+          <p>Conta Fenix: <b>${otherUserWithThisKick.username}</b></p>
+          <p>Use a conta Fenix correta ou fale com o admin.</p>
+        </body>
+      </html>
+    `);
+  }
+
+user.kickConnected = true;
     user.kickLoggedIn = true;
     user.kickUserId = kickUser.id;
     user.kickUsername = kickUser.username || kickUser.slug || 'Kick conectada';
