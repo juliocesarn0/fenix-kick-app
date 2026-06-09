@@ -15,6 +15,7 @@ function createWindow() {
     minWidth: 1180,
     minHeight: 720,
     title: "Fenix Lurk",
+    icon: path.join(__dirname, "assets", "icon.ico"),
     backgroundColor: "#07070a",
     show: false,
     autoHideMenuBar: true,
@@ -129,3 +130,5 @@ ipcMain.handle("fenix:is-kick-logged-in", async () => {
     return { ok: false, loggedIn: false };
   }
 });
+
+

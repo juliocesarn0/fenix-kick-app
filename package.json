@@ -33,7 +33,8 @@
       "package.json"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "desktop/assets/icon.ico"
     },
     "nsis": {
       "oneClick": false,
@@ -42,5 +43,7 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Fenix Lurk"
     }
-  }
+  },
+  "productName": "Fenix Lurk",
+  "author": "GokuuMods"
 }
