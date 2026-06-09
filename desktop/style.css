@@ -989,3 +989,23 @@ webview {
 }
 
 
+
+
+/* FENIX_REMOVE_ADMIN_SECRET_VISUAL_FINAL */
+#adminSecret,
+#adminPassword,
+#adminPass,
+#adminSecretInput,
+#fenixAdminSecret {
+  display: none !important;
+}
+
+
+
+/* FENIX_DISABLE_BROKEN_GATE_FINAL */
+#tabsLoginGate,
+.tabs-login-gate,
+.open-kick-login-btn,
+.fenix-kick-login-instruction {
+  display: none !important;
+}

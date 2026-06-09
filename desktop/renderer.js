@@ -402,9 +402,24 @@ function setSlot(slot) {
   label.textContent = slot.channel ? "kick.com/" + slot.channel : "Aguardando live";
 
   if (!slot.active || !url) {
-    setMaintenance(number, true, "Aguardando canal agendado");
-    status.textContent = "Manutenção";
-    view.removeAttribute("src");
+    const fallbackUrl = "https://kick.com/";
+
+    label.textContent = "kick.com";
+    setMaintenance(number, false);
+    status.textContent = "Login Kick";
+
+    const currentUrl = view.getAttribute("src") || "";
+
+    if (currentUrl !== fallbackUrl) {
+      view.src = fallbackUrl;
+    }
+
+    muteWebview(view);
+
+    if (number === 1) {
+      setTimeout(checkKickLoggedFromView1, 1200);
+    }
+
     return;
   }
 
@@ -979,7 +994,7 @@ function createAdminPanel() {
           <button id="adminLoadUsers">Atualizar usuarios</button>
         </div>
         <div id="adminUsersList" class="admin-users-list">
-          <div class="admin-user-empty">Digite a senha admin e clique em Atualizar usuarios.</div>
+          <div class="admin-user-empty">Clique em Atualizar usuarios para carregar a tabela.</div>
         </div>
       </div>
 
@@ -1046,7 +1061,7 @@ function createAdminPanel() {
     fenixAdminSecret = document.getElementById("adminSecretInput")?.value?.trim() || "";
 
     if (!fenixAdminSecret) {
-      throw new Error("Digite a senha admin antes de salvar.");
+      throw new Error("Salvando horario...");
     }
 
     const payload = {
@@ -1456,3 +1471,163 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(() => {
+    const adminUsersList = document.getElementById("adminUsersList");
+    if (adminUsersList && adminUsersList.innerText.toLowerCase().includes("senha admin")) {
+      adminUsersList.innerHTML = '<div class="admin-empty">Clique em Atualizar usuarios para carregar a tabela.</div>';
+    }
+
+    const updateUsersBtn =
+      document.getElementById("adminLoadUsers") ||
+      document.getElementById("adminUpdateUsers") ||
+      document.getElementById("loadAdminUsers") ||
+      Array.from(document.querySelectorAll("button")).find((btn) =>
+        String(btn.innerText || "").toLowerCase().includes("atualizar usuarios")
+      );
+
+    if (updateUsersBtn && typeof loadAdminUsers === "function") {
+      updateUsersBtn.onclick = () => loadAdminUsers();
+    }
+  }, 800);
+});
+
+
+function showTabsLoginGate(show) {
+  let gate = document.getElementById("tabsLoginGate");
+
+  if (!gate) {
+    gate = document.createElement("div");
+    gate.id = "tabsLoginGate";
+    gate.className = "tabs-login-gate";
+    gate.innerHTML =
+      '<div class="tabs-login-card">' +
+        '<h2>Login Kick obrigatorio</h2>' +
+        '<p>Entre na Kick dentro da <b>Tela 1</b> para liberar os pontos.</p>' +
+        '<p class="tabs-login-small">Depois que aparecer sua foto/avatar da Kick na Tela 1, clique em verificar.</p>' +
+        '<div class="tabs-login-actions">' +
+          '<button id="tabsLoginRefreshBtn">Atualizar Telas</button>' +
+          '<button id="tabsLoginCheckBtn">Ja loguei, verificar</button>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(gate);
+
+    const refreshBtn = document.getElementById("tabsLoginRefreshBtn");
+    const checkBtn = document.getElementById("tabsLoginCheckBtn");
+
+    if (refreshBtn) {
+      refreshBtn.onclick = async () => {
+        if (typeof refreshScreens === "function") {
+          await refreshScreens();
+        }
+        setTimeout(() => {
+          if (typeof checkKickTabsLoggedIn === "function") {
+            checkKickTabsLoggedIn();
+          }
+        }, 3000);
+      };
+    }
+
+    if (checkBtn) {
+      checkBtn.onclick = async () => {
+        if (typeof checkKickTabsLoggedIn === "function") {
+          await checkKickTabsLoggedIn();
+        }
+      };
+    }
+  }
+
+  gate.style.display = show ? "flex" : "none";
+}
+
+const originalUpdateKickTabsStatusFenix = typeof updateKickTabsStatus === "function" ? updateKickTabsStatus : null;
+
+if (originalUpdateKickTabsStatusFenix) {
+  updateKickTabsStatus = function(logged) {
+    originalUpdateKickTabsStatusFenix(logged);
+
+    const hasFenixUser =
+      typeof fenixSession !== "undefined" &&
+      fenixSession &&
+      fenixSession.user;
+
+    if (!hasFenixUser) {
+      showTabsLoginGate(false);
+      return;
+    }
+
+    showTabsLoginGate(!Boolean(logged));
+  };
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(() => {
+    if (typeof checkKickTabsLoggedIn === "function") {
+      checkKickTabsLoggedIn();
+    }
+  }, 2500);
+});
+
+
+
+
+
+
+function fenixOpenKickHomeWhenNoLive() {
+  try {
+    for (const number of [1, 2, 3]) {
+      const view = document.getElementById("view" + number);
+      if (!view) continue;
+
+      const src = String(view.getAttribute("src") || "").trim().toLowerCase();
+
+      const shouldOpenKickHome =
+        !src ||
+        src === "about:blank" ||
+        src.includes("manutencao") ||
+        src.includes("maintenance");
+
+      if (shouldOpenKickHome) {
+        view.setAttribute("src", "https://kick.com/");
+      }
+    }
+
+    if (typeof setWarning === "function") {
+      setWarning("Sem live agendada: abrindo kick.com nas telas para login. Pontos so contam quando tiver live agendada.");
+    }
+  } catch (error) {
+    console.error("Erro ao abrir kick.com sem live:", error);
+  }
+}
+
+const fenixOriginalRefreshScreensNoLive =
+  typeof refreshScreens === "function" ? refreshScreens : null;
+
+if (fenixOriginalRefreshScreensNoLive) {
+  refreshScreens = async function(...args) {
+    const result = await fenixOriginalRefreshScreensNoLive.apply(this, args);
+
+    setTimeout(() => {
+      fenixOpenKickHomeWhenNoLive();
+
+      if (typeof checkKickTabsLoggedIn === "function") {
+        checkKickTabsLoggedIn();
+      }
+    }, 1000);
+
+    return result;
+  };
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(() => {
+    fenixOpenKickHomeWhenNoLive();
+
+    if (typeof checkKickTabsLoggedIn === "function") {
+      checkKickTabsLoggedIn();
+    }
+  }, 2500);
+});
