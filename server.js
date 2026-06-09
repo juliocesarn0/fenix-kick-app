@@ -289,6 +289,7 @@ app.get('/api/livestreams/stats', requireKickConfig, async (req, res) => {
 
 // FENIX_LURK_CORE_API
 const FENIX_ADMIN_USER = 'GokuuMods';
+const FENIX_ADMIN_SECRET = process.env.FENIX_ADMIN_SECRET || '';
 const FENIX_DATA_DIR = path.join(__dirname, 'backend', 'data');
 const FENIX_DATA_FILE = path.join(FENIX_DATA_DIR, 'fenix-data.json');
 
@@ -442,10 +443,23 @@ function requireFenixAdmin(req, res, next) {
     req.query?.adminUsername ||
     '';
 
+  const adminSecret =
+    req.headers['x-fenix-admin-secret'] ||
+    req.body?.adminSecret ||
+    req.query?.adminSecret ||
+    '';
+
   if (String(adminUsername).trim().toLowerCase() !== FENIX_ADMIN_USER.toLowerCase()) {
     return res.status(403).json({
       ok: false,
       message: 'Painel Admin liberado somente para GokuuMods.'
+    });
+  }
+
+  if (!FENIX_ADMIN_SECRET || String(adminSecret) !== String(FENIX_ADMIN_SECRET)) {
+    return res.status(403).json({
+      ok: false,
+      message: 'Senha admin invalida.'
     });
   }
 
@@ -936,4 +950,6 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
+
 

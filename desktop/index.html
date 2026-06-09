@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'self' https://kick.com https://www.kick.com https://id.kick.com https://fenix-kick-app-production.up.railway.app; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://fenix-kick-app-production.up.railway.app; img-src 'self' https: data:; frame-src https://kick.com https://www.kick.com https://id.kick.com;"
+    content="default-src 'self' https://kick.com https://www.kick.com https://id.kick.com https://fenix-kick-app-production.up.railway.app; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://fenix-kick-app-production.up.railway.app; img-src 'self' https: data:; frame-src https://kick.com https://www.kick.com https://id.kick.com;"
   />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Fenix Lurk</title>
@@ -13,80 +13,122 @@
 <body>
   <div id="loginGate" class="login-gate">
     <div class="login-card">
-      <div class="login-logo">F</div>
-      <h1>Fenix Lurk</h1>
-      <p>Crie sua conta ou entre usando seu username e senha.</p>
+      <div class="login-brand">
+        <img src="./assets/fenix-farm-logo.png" alt="Fenix Farm" />
+      </div>
 
-      <input id="loginUsername" type="text" placeholder="Username Fenix" autocomplete="username" />
-      <input id="loginPassword" type="password" placeholder="Senha" autocomplete="current-password" />
+      <h1>Entrar no Fenix</h1>
+      <p>Crie ou entre na sua conta Fenix para começar o farm.</p>
 
-      <button id="loginButton" type="button">Entrar / Criar Conta</button>
+      <label>
+        Usuario
+        <input id="loginUsername" autocomplete="username" placeholder="Digite seu usuario" />
+      </label>
 
-      <div id="loginMessage" class="login-message"></div>
+      <label>
+        Senha
+        <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Sua senha" />
+      </label>
+
+      <button id="loginBtn">Entrar / Criar Conta</button>
+      <div id="loginError"></div>
     </div>
   </div>
 
-  <div class="app hidden" id="mainApp">
+  <div id="kickPopup" class="kick-popup">
+    <div class="kick-popup-card">
+      <strong>Login Kick detectado</strong>
+      <p>Clique em Atualizar Telas para aplicar a sessão da Kick nas 3 telas.</p>
+      <button id="popupRefreshBtn">Atualizar Telas</button>
+    </div>
+  </div>
+
+  <div class="app">
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-mark">F</div>
-        <div>
-          <strong>FENIX LURK</strong>
-          <span>VIEWER</span>
-        </div>
+        <img class="brand-logo" src="./assets/fenix-farm-logo.png" alt="Fenix Farm" />
       </div>
 
       <div class="profile">
-        <div class="profile-name" id="profileName">gokuumods</div>
-        <div class="profile-role">ESPECTADOR</div>
+        <strong id="profileName">GokuuMods</strong>
       </div>
 
-      <div class="coins-box">
-        <div class="coin-icon">◎</div>
+      <div class="points-card">
+        <span class="point-dot">◎</span>
         <div>
-          <strong id="coinValue">0</strong>
-          <span>Moedas</span>
+          <strong id="totalPoints">0</strong>
+          <span>PONTOS DE FARM</span>
         </div>
       </div>
 
-      <div class="meta-box">
-        <div class="meta-head">
-          <span>Meta de Horas</span>
-          <b id="hoursMeta">0h / 100h</b>
+      <div class="weekly-panel">
+        <div class="weekly-head">
+          <div>
+            <span>PAINEL SEMANAL</span>
+            <strong>Minha elegibilidade</strong>
+          </div>
+          <b id="weeklyStatus">NAO LIBERADO</b>
         </div>
-        <div class="progress">
-          <div id="hoursBar"></div>
-        </div>
-      </div>
 
-      <div class="layout-box">
-        <p>LAYOUT DO GRID</p>
-        <div class="layout-buttons">
-          <button class="layout-btn active" data-layout="cols">Colunas</button>
-          <button class="layout-btn" data-layout="focus">Foco (1+2)</button>
-          <button class="layout-btn" data-layout="rows">Linhas</button>
+        <div class="weekly-line">
+          <strong><span id="weeklyPoints">0</span> / <span id="weeklyGoal">300</span></strong>
+          <strong id="weeklyPercent">0%</strong>
         </div>
+
+        <div class="weekly-bar">
+          <div id="weeklyBar"></div>
+        </div>
+
+        <div class="weekly-grid">
+          <div>
+            <small>META</small>
+            <strong>300</strong>
+          </div>
+          <div>
+            <small>MINIMO 70%</small>
+            <strong>210</strong>
+          </div>
+          <div>
+            <small>FALTAM</small>
+            <strong id="weeklyMissing">210</strong>
+          </div>
+          <div>
+            <small>CICLO</small>
+            <strong>10 min</strong>
+          </div>
+        </div>
+
+        <p id="weeklyText">Continue farmando para liberar a proxima grade.</p>
+        <small class="weekly-period">Conta de segunda 00:00 ate sabado 23:59. Domingo nao conta.</small>
       </div>
 
       <div class="notice">
         <div class="notice-title">
-          <span>AVISO GERAL</span>
+          <span>RECADO DO ADMIN</span>
           <b id="noticeCount">0</b>
         </div>
         <div id="noticeText">Nenhum aviso geral ainda.</div>
       </div>
 
-      <button class="admin-panel-btn hidden" id="adminPanelBtn" type="button">
-        Painel Admin
-      </button>
+      <button class="admin-btn" id="adminBtn">Painel Admin</button>
 
-      <div class="bottom-actions">
-        <label class="switch-row">
-          <input type="checkbox" id="startWithWindows" checked />
-          <span>Iniciar com o Windows</span>
-        </label>
+      <div class="sidebar-spacer"></div>
 
-        <button class="clear-btn" id="clearCookiesBtn">Limpar Cookies de Login</button>
+      <label class="switch-row">
+        <input type="checkbox" id="startWithWindows" checked />
+        <span>Iniciar com o Windows</span>
+      </label>
+
+      <div class="cycle-card">
+        <span>CICLO</span>
+        <strong id="cycleTimer">10:00</strong>
+      </div>
+
+      <div class="side-actions">
+        <button id="refreshScreensBtn">Atualizar Telas</button>
+        <button id="qualityBtn">Modo Leve</button>
+        <button id="exitBtn">Sair</button>
+        <button id="resetLoginBtn">Resetar Login</button>
       </div>
     </aside>
 
@@ -94,27 +136,19 @@
       <header class="topbar">
         <div class="left-top">
           <button class="menu-btn">☰</button>
-          <div class="dot ok" id="fenixDot"></div>
-          <span id="fenixStatusText">FENIX CONECTADO</span>
-          <div class="dot danger" id="kickDot"></div>
-          <span id="kickStatusText">KICK NAO LOGADA</span>
-        </div>
-
-        <div class="right-top">
-          <div class="timer-pill" id="clockTimer">19:50</div>
-          <button class="top-btn" id="refreshScreensBtn">Atualizar Telas</button>
-          <button class="top-btn" id="muteAllBtn">Silenciar Tudo</button>
-          <button class="top-btn quality" id="qualityBtn">160p</button>
-          <button class="top-btn exit" id="exitBtn">Sair</button>
+          <div class="dot ok"></div>
+          <span id="fenixStatus">FENIX APP ONLINE</span>
+          <div id="kickDot" class="dot bad"></div>
+          <span id="kickStatus">KICK NAO LOGADA</span>
         </div>
       </header>
 
       <div class="warning-bar" id="warningBar">
-        COMEÇAR A LIVE 5 MINUTOS ANTES DO SEU HORÁRIO PROGRAMADO NO FENIX LURK
+        LOGIN KICK OBRIGATORIO: Clique dentro da Tela 1, faca login na sua conta Kick e depois clique em Atualizar Telas.
       </div>
 
       <section class="viewer-grid cols" id="viewerGrid">
-        <div class="screen-card" id="card1">
+        <div class="screen-card">
           <div class="screen-head">
             <div>
               <strong>TELA 1</strong>
@@ -125,7 +159,6 @@
               <button data-open="1">↗</button>
             </div>
           </div>
-
           <div class="webview-wrap">
             <webview id="view1" partition="persist:fenix-kick-session" allowpopups></webview>
             <div class="maintenance" id="maint1">
@@ -133,14 +166,13 @@
               <span>Aguardando canal agendado</span>
             </div>
           </div>
-
           <div class="screen-foot">
-            <span id="slot1Status">Sem canal</span>
-            <span id="slot1Quality">160p</span>
+            <span id="slot1Status">Manutenção</span>
+            <span>160p</span>
           </div>
         </div>
 
-        <div class="screen-card" id="card2">
+        <div class="screen-card">
           <div class="screen-head">
             <div>
               <strong>TELA 2</strong>
@@ -151,7 +183,6 @@
               <button data-open="2">↗</button>
             </div>
           </div>
-
           <div class="webview-wrap">
             <webview id="view2" partition="persist:fenix-kick-session" allowpopups></webview>
             <div class="maintenance" id="maint2">
@@ -159,14 +190,13 @@
               <span>Aguardando canal agendado</span>
             </div>
           </div>
-
           <div class="screen-foot">
-            <span id="slot2Status">Sem canal</span>
-            <span id="slot2Quality">160p</span>
+            <span id="slot2Status">Manutenção</span>
+            <span>160p</span>
           </div>
         </div>
 
-        <div class="screen-card" id="card3">
+        <div class="screen-card">
           <div class="screen-head">
             <div>
               <strong>TELA 3</strong>
@@ -177,7 +207,6 @@
               <button data-open="3">↗</button>
             </div>
           </div>
-
           <div class="webview-wrap">
             <webview id="view3" partition="persist:fenix-kick-session" allowpopups></webview>
             <div class="maintenance" id="maint3">
@@ -185,152 +214,16 @@
               <span>Aguardando canal agendado</span>
             </div>
           </div>
-
           <div class="screen-foot">
-            <span id="slot3Status">Sem canal</span>
-            <span id="slot3Quality">160p</span>
+            <span id="slot3Status">Manutenção</span>
+            <span>160p</span>
           </div>
         </div>
-      </section>
-
-      <section class="log-panel">
-        <div class="log-head">
-          <strong>LOG DO APP</strong><span id="cycleInfo">Ciclo: aguardando login</span>
-          <button id="clearLogBtn">Limpar</button>
-        </div>
-        <div id="logList"></div>
       </section>
     </main>
-  </div>
-
-  <div class="admin-modal hidden" id="adminModal">
-    <div class="admin-card">
-      <div class="admin-head">
-        <div>
-          <strong>Painel Admin Fenix</strong>
-          <span>Somente GokuuMods</span>
-        </div>
-        <button id="closeAdminBtn" type="button">Fechar</button>
-      </div>
-
-      <div class="admin-grid">
-        <section class="admin-section">
-          <h3>Usuários Online</h3>
-          <div id="adminUsersList" class="admin-users-list">
-            Carregando...
-          </div>
-        </section>
-
-        <section class="admin-section">
-          <h3>Grade da Hora</h3>
-
-          <div class="admin-form-row">
-            <label>Data</label>
-            <input id="adminSlotDate" type="date" />
-          </div>
-
-          <div class="admin-form-row">
-            <label>Hora</label>
-            <select id="adminSlotHour">
-              <option value="00:00">00:00</option>
-              <option value="01:00">01:00</option>
-              <option value="02:00">02:00</option>
-              <option value="03:00">03:00</option>
-              <option value="04:00">04:00</option>
-              <option value="05:00">05:00</option>
-              <option value="06:00">06:00</option>
-              <option value="07:00">07:00</option>
-              <option value="08:00">08:00</option>
-              <option value="09:00">09:00</option>
-              <option value="10:00">10:00</option>
-              <option value="11:00">11:00</option>
-              <option value="12:00">12:00</option>
-              <option value="13:00">13:00</option>
-              <option value="14:00">14:00</option>
-              <option value="15:00">15:00</option>
-              <option value="16:00">16:00</option>
-              <option value="17:00">17:00</option>
-              <option value="18:00">18:00</option>
-              <option value="19:00">19:00</option>
-              <option value="20:00">20:00</option>
-              <option value="21:00">21:00</option>
-              <option value="22:00">22:00</option>
-              <option value="23:00">23:00</option>
-            </select>
-          </div>
-
-          <div class="admin-screen-box">
-            <strong>Tela 1</strong>
-            <input id="adminScreen1Name" placeholder="Canal ou nome" />
-            <input id="adminScreen1Url" placeholder="https://kick.com/canal" />
-            <label><input id="adminScreen1Maintenance" type="checkbox" /> Manutenção</label>
-          </div>
-
-          <div class="admin-screen-box">
-            <strong>Tela 2</strong>
-            <input id="adminScreen2Name" placeholder="Canal ou nome" />
-            <input id="adminScreen2Url" placeholder="https://kick.com/canal" />
-            <label><input id="adminScreen2Maintenance" type="checkbox" /> Manutenção</label>
-          </div>
-
-          <div class="admin-screen-box">
-            <strong>Tela 3</strong>
-            <input id="adminScreen3Name" placeholder="Canal ou nome" />
-            <input id="adminScreen3Url" placeholder="https://kick.com/canal" />
-            <label><input id="adminScreen3Maintenance" type="checkbox" /> Manutenção</label>
-          </div>
-
-          <button id="saveAdminScheduleBtn" class="admin-save-btn" type="button">
-            Salvar Grade
-          </button>
-        </section>
-
-        <section class="admin-section admin-bulk-section">
-          <h3>Grade Rápida</h3>
-
-          <div class="bulk-grid-top">
-            <div class="admin-form-row">
-              <label>Data inicial</label>
-              <input id="bulkStartDate" type="date" />
-            </div>
-
-            <div class="admin-form-row">
-              <label>Quantidade de dias</label>
-              <select id="bulkDays">
-                <option value="1">1 dia</option>
-                <option value="2">2 dias</option>
-                <option value="3">3 dias</option>
-                <option value="4">4 dias</option>
-                <option value="5">5 dias</option>
-                <option value="6">6 dias</option>
-                <option value="7">7 dias / semana toda</option>
-              </select>
-            </div>
-          </div>
-
-          <p class="bulk-help">
-            Formato: <b>HORA TELA1 TELA2 TELA3</b>. Use <b>-</b> para deixar a tela em manutenção.
-          </p>
-
-          <textarea id="bulkScheduleText" placeholder="08:00 gokuumods canal2 canal3&#10;09:00 canal4 canal5 -&#10;10:00 - canal6 canal7"></textarea>
-
-          <div class="bulk-actions">
-            <button id="fillBulkExampleBtn" class="admin-save-btn" type="button">Preencher exemplo</button>
-            <button id="saveBulkScheduleBtn" class="admin-save-btn" type="button">Salvar Grade Rápida</button>
-          </div>
-        </section>
-
-        <section class="admin-section admin-notice-section">
-          <h3>Aviso Geral</h3>
-          <textarea id="adminNoticeText" placeholder="Mensagem que aparece no topo do app"></textarea>
-          <button id="saveAdminNoticeBtn" class="admin-save-btn" type="button">
-            Salvar Aviso
-          </button>
-        </section>
-      </div>
-    </div>
   </div>
 
   <script src="./renderer.js"></script>
 </body>
 </html>
+

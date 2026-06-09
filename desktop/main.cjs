@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, Menu, shell } = require("electron");
+﻿const { app, BrowserWindow, Menu, ipcMain, session } = require("electron");
 const path = require("path");
 
 let mainWindow = null;
@@ -13,7 +13,7 @@ function createWindow() {
     backgroundColor: "#07070a",
     show: false,
     autoHideMenuBar: true,
-    webPreferences: {
+    webPreferences: { preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: true,
@@ -57,3 +57,31 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+
+ipcMain.handle("fenix:reset-login", async () => {
+  try {
+    await session.fromPartition("persist:fenix-kick-session").clearStorageData();
+    await session.defaultSession.clearStorageData();
+  } catch (error) {}
+
+  app.relaunch();
+  app.exit(0);
+});
+
+ipcMain.handle("fenix:focus-login", async () => {
+  const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+
+  if (win && !win.isDestroyed()) {
+    win.minimize();
+
+    setTimeout(() => {
+      if (!win.isDestroyed()) {
+        win.restore();
+        win.focus();
+      }
+    }, 180);
+  }
+
+  return true;
+});
+
