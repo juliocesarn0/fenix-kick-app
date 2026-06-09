@@ -723,6 +723,52 @@ app.get('/api/fenix/admin/online-users', requireFenixAdmin, (req, res) => {
   res.json({ ok: true, users });
 });
 
+
+// FENIX_ADMIN_RESET_USER_POINTS_API
+app.post('/api/fenix/admin/user-points/reset', requireFenixAdmin, (req, res) => {
+  const data = readFenixData();
+
+  const username = normalizeFenixUsername(req.body?.username);
+
+  if (!username) {
+    return res.status(400).json({ ok: false, message: 'Usuario nao informado.' });
+  }
+
+  const user = data.users.find((item) => {
+    return String(item.username || '').toLowerCase() === username.toLowerCase();
+  });
+
+  if (!user) {
+    return res.status(404).json({ ok: false, message: 'Usuario nao encontrado.' });
+  }
+
+  user.points = Math.max(0, Number(req.body?.points || 0));
+  user.weeklyPoints = Math.max(0, Number(req.body?.weeklyPoints || 0));
+  user.totalMinutes = Math.max(0, Number(req.body?.totalMinutes || 0));
+  user.weeklyMinutes = Math.max(0, Number(req.body?.weeklyMinutes || 0));
+  user.updatedAt = new Date().toISOString();
+
+  if (req.body?.clearCycles !== false) {
+    data.cycles = data.cycles.filter((cycle) => {
+      return String(cycle.username || '').toLowerCase() !== username.toLowerCase();
+    });
+  }
+
+  writeFenixData(data);
+
+  res.json({
+    ok: true,
+    message: 'Pontos resetados com sucesso.',
+    user: {
+      username: user.username,
+      points: user.points,
+      weeklyPoints: user.weeklyPoints,
+      totalMinutes: user.totalMinutes,
+      weeklyMinutes: user.weeklyMinutes
+    }
+  });
+});
+
 app.get('/api/fenix/admin/schedule', requireFenixAdmin, (req, res) => {
   const data = readFenixData();
   res.json({ ok: true, schedule: data.schedule });
