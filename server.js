@@ -1,4 +1,4 @@
-import 'dotenv/config';
+﻿import 'dotenv/config';
 import crypto from 'crypto';
 import fs from 'fs';
 import express from 'express';
@@ -302,7 +302,7 @@ function createDefaultFenixData() {
     notices: [
       {
         id: crypto.randomUUID(),
-        message: 'COMEÇAR A LIVE 5 MINUTOS ANTES DO SEU HORARIO PROGRAMADO NO FENIX LURK',
+        message: 'COMEÃ‡AR A LIVE 5 MINUTOS ANTES DO SEU HORARIO PROGRAMADO NO FENIX LURK',
         active: true,
         createdBy: FENIX_ADMIN_USER,
         createdAt: new Date().toISOString()
@@ -649,7 +649,7 @@ app.post('/api/fenix/app/complete-cycle', (req, res) => {
   const slot = getCurrentFenixSlot(data);
   const desktopSlots = fenixSlotToDesktopSlots(slot);
   const activeScreens = desktopSlots.filter((item) => item.active).length;
-  const points = activeScreens * 10;
+  const points = activeScreens;
 
   const now = new Date().toISOString();
 
@@ -890,3 +890,4 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
