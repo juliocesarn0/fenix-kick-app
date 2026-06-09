@@ -71,8 +71,24 @@ function showLoginGate(show) {
   }
 }
 
+function sanitizeFenixText(message) {
+  return String(message || "")
+    .replaceAll("COMEÃ‡AR", "COMECAR")
+    .replaceAll("COMEÃ‡", "COMEC")
+    .replaceAll("Ã‡", "C")
+    .replaceAll("Ã§", "c")
+    .replaceAll("Ã¡", "a")
+    .replaceAll("Ã©", "e")
+    .replaceAll("Ã­", "i")
+    .replaceAll("Ã³", "o")
+    .replaceAll("Ãº", "u")
+    .replaceAll("Ã£", "a")
+    .replaceAll("Ãµ", "o")
+    .replaceAll("Ã", "A");
+}
+
 function setWarning(message) {
-  $("warningBar").textContent = message;
+  $("warningBar").textContent = sanitizeFenixText(message);
 }
 
 function updateKickStatus(logged) {
@@ -510,6 +526,66 @@ function clearLogin() {
   window.location.reload();
 }
 
+
+function renderAdminUsers(users) {
+  const box = $("adminUsersList");
+
+  if (!box) return;
+
+  if (!Array.isArray(users) || users.length === 0) {
+    box.innerHTML = '<div class="admin-user-empty">Nenhum usuario cadastrado ainda.</div>';
+    return;
+  }
+
+  box.innerHTML = users.map((user) => {
+    const username = user.username || user.userName || "Sem nome";
+    const points = Number(user.points || 0);
+    const weeklyPoints = Number(user.weeklyPoints || 0);
+    const totalMinutes = Number(user.totalMinutes || 0);
+    const weeklyMinutes = Number(user.weeklyMinutes || 0);
+    const kickLogged = user.kickLoggedIn ? "Kick logada" : "Kick nao logada";
+    const role = user.role || (user.isAdmin ? "ADMIN" : "USER");
+
+    return `
+      <div class="admin-user-row">
+        <div>
+          <strong>${username}</strong>
+          <span>${role} • ${kickLogged}</span>
+        </div>
+        <div><small>Pontos</small><b>${points}</b></div>
+        <div><small>Semana</small><b>${weeklyPoints}</b></div>
+        <div><small>Min total</small><b>${totalMinutes}</b></div>
+        <div><small>Min semana</small><b>${weeklyMinutes}</b></div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function loadAdminUsers() {
+  const secretInput = $("adminSecretInput");
+  fenixAdminSecret = secretInput?.value?.trim() || fenixAdminSecret || "";
+
+  if (!fenixAdminSecret) {
+    throw new Error("Digite a senha admin antes de carregar usuarios.");
+  }
+
+  const res = await fetch(CONFIG.adminApi + "/api/fenix/admin/online-users", {
+    method: "GET",
+    headers: {
+      "x-fenix-admin": "GokuuMods",
+      "x-fenix-admin-secret": fenixAdminSecret
+    }
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok || data.ok === false) {
+    throw new Error(data.message || data.error || "Erro ao carregar usuarios.");
+  }
+
+  renderAdminUsers(data.users || []);
+  $("adminMsg").textContent = "Usuarios carregados.";
+}
 function createAdminPanel() {
   if (!fenixSession?.user?.isAdmin && String(fenixSession?.user?.username || "").toLowerCase() !== "gokuumods") {
     alert("Painel Admin liberado somente para GokuuMods.");
@@ -565,6 +641,16 @@ function createAdminPanel() {
             <button data-save-hour="${hour}">Salvar</button>
           </div>
         `).join("")}
+      </div>
+
+      <div class="fenix-admin-users">
+        <div class="fenix-admin-users-head">
+          <strong>Usuarios / Pontos</strong>
+          <button id="adminLoadUsers">Atualizar usuarios</button>
+        </div>
+        <div id="adminUsersList" class="admin-users-list">
+          <div class="admin-user-empty">Digite a senha admin e clique em Atualizar usuarios.</div>
+        </div>
       </div>
 
       <div class="fenix-admin-bottom">
@@ -682,6 +768,14 @@ function createAdminPanel() {
 
   $("adminRefresh").addEventListener("click", refreshScreens);
 
+  $("adminLoadUsers").addEventListener("click", async () => {
+    try {
+      await loadAdminUsers();
+    } catch (error) {
+      $("adminMsg").textContent = error.message || String(error);
+    }
+  });
+
   $("adminSaveDay").addEventListener("click", async () => {
     const rows = Array.from(modal.querySelectorAll(".fenix-admin-row"));
     const filled = rows.filter((row) => {
@@ -771,6 +865,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   // FENIX_RECHECK_KICK_LOGIN_TIMER
   setInterval(checkKickLoggedFromView1, 15000);
 });
+
+
 
 
 
