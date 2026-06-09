@@ -95,8 +95,21 @@ function hideKickPopup() {
   $("kickPopup").classList.remove("show");
 }
 
+
+function updateAdminButtonVisibility(user) {
+  const adminBtn = $("adminBtn");
+
+  if (!adminBtn) return;
+
+  const username = String(user?.username || "").toLowerCase();
+  const isAdmin = Boolean(user?.isAdmin) || username === "gokuumods";
+
+  adminBtn.style.display = isAdmin ? "block" : "none";
+}
 function updateUserUi(user) {
   if (!user) return;
+
+  updateAdminButtonVisibility(user);
 
   $("profileName").textContent = user.username || CONFIG.fallbackProfile;
   $("totalPoints").textContent = Number(user.points || 0);
@@ -738,6 +751,7 @@ function setupEvents() {
 
 document.addEventListener("DOMContentLoaded", async () => {
   setupEvents();
+  updateAdminButtonVisibility(null);
   updateKickStatus(false);
 
   const restored = restoreSession();
@@ -757,6 +771,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // FENIX_RECHECK_KICK_LOGIN_TIMER
   setInterval(checkKickLoggedFromView1, 15000);
 });
+
 
 
 
