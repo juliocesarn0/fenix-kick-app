@@ -310,7 +310,9 @@ function createDefaultFenixData() {
         createdAt: new Date().toISOString()
       }
     ],
-    cycles: []
+    cycles: [],
+    deviceLocks: [],
+    kickLocks: []
   };
 }
 
@@ -328,7 +330,9 @@ function readFenixData() {
       sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
       schedule: Array.isArray(parsed.schedule) ? parsed.schedule : [],
       notices: Array.isArray(parsed.notices) ? parsed.notices : [],
-      cycles: Array.isArray(parsed.cycles) ? parsed.cycles : []
+      cycles: Array.isArray(parsed.cycles) ? parsed.cycles : [],
+      deviceLocks: Array.isArray(parsed.deviceLocks) ? parsed.deviceLocks : [],
+      kickLocks: Array.isArray(parsed.kickLocks) ? parsed.kickLocks : []
     };
   } catch (error) {
     console.error('Erro lendo fenix-data.json:', error);
@@ -391,6 +395,24 @@ function getFenixDateKey(date = new Date()) {
 function getFenixHourKey(date = new Date()) {
   const parts = getBrazilParts(date);
   return String(parts.hour || '00').padStart(2, '0') + ':00';
+}
+
+
+function publicFenixUserSafe(user) {
+  return {
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    isAdmin: user.role === 'ADMIN',
+    points: Number(user.points || 0),
+    weeklyPoints: Number(user.weeklyPoints || 0),
+    totalMinutes: Number(user.totalMinutes || 0),
+    weeklyMinutes: Number(user.weeklyMinutes || 0),
+    kickLoggedIn: Boolean(user.kickLoggedIn || user.kickConnected),
+    kickConnected: Boolean(user.kickConnected || user.kickLoggedIn),
+    kickUsername: user.kickUsername || user.kickName || '',
+    kickUserId: user.kickUserId || user.kickId || ''
+  };
 }
 
 function getCurrentFenixSlot(data, now = new Date()) {
@@ -514,6 +536,7 @@ function requireFenixAdmin(req, res, next) {
 app.post('/api/fenix/auth/register-or-login', (req, res) => {
   const username = normalizeFenixUsername(req.body?.username);
   const password = String(req.body?.password || '');
+  const deviceId = String(req.body?.deviceId || '').trim();
 
   if (!username || username.length < 3) {
     return res.status(400).json({ ok: false, message: 'Username precisa ter pelo menos 3 caracteres.' });
@@ -528,6 +551,24 @@ app.post('/api/fenix/auth/register-or-login', (req, res) => {
 
   let user = data.users.find((item) => item.username.toLowerCase() === username.toLowerCase());
   let created = false;
+
+  
+  if (!user && deviceId) {
+    data.deviceLocks = Array.isArray(data.deviceLocks) ? data.deviceLocks : [];
+
+    const existingDeviceLock = data.deviceLocks.find((lock) => {
+      return String(lock.deviceId || '') === deviceId;
+    });
+
+    if (existingDeviceLock) {
+      const lockedUser = data.users.find((item) => item.id === existingDeviceLock.userId);
+
+      return res.status(403).json({
+        ok: false,
+        message: 'Este app ja possui uma conta Fenix vinculada: ' + (lockedUser?.username || 'usuario existente') + '. Use essa conta ou fale com o admin.'
+      });
+    }
+  }
 
   if (!user) {
     user = {
@@ -548,6 +589,16 @@ app.post('/api/fenix/auth/register-or-login', (req, res) => {
     };
 
     data.users.push(user);
+
+    if (deviceId) {
+      data.deviceLocks = Array.isArray(data.deviceLocks) ? data.deviceLocks : [];
+      data.deviceLocks.push({
+        deviceId,
+        userId: user.id,
+        username: user.username,
+        createdAt: now
+      });
+    }
     created = true;
   } else {
     if (!verifyFenixPassword(password, user.passwordHash)) {
@@ -812,6 +863,65 @@ app.get('/api/fenix/app/me', (req, res) => {
   res.json({
     ok: true,
     user: publicFenixUser(user)
+  });
+});
+
+
+
+
+// FENIX_RESET_ACCESS_FINAL
+app.post('/api/fenix/auth/reset-access', (req, res) => {
+  const sessionId = String(req.body?.sessionId || '').trim();
+  const username = String(req.body?.username || req.body?.userName || '').trim();
+
+  if (!sessionId && !username) {
+    return res.status(400).json({
+      ok: false,
+      message: 'Sessao ou usuario Fenix nao informado.'
+    });
+  }
+
+  const data = readFenixData();
+
+  data.sessions = Array.isArray(data.sessions) ? data.sessions : [];
+  data.users = Array.isArray(data.users) ? data.users : [];
+
+  const session = sessionId
+    ? data.sessions.find((item) => item.id === sessionId || item.sessionId === sessionId)
+    : null;
+
+  const user = data.users.find((item) => {
+    return (
+      (session && (item.id === session.userId || item.username === session.username)) ||
+      (username && String(item.username || '').toLowerCase() === username.toLowerCase())
+    );
+  });
+
+  if (user) {
+    user.kickLoggedIn = false;
+    user.kickConnected = false;
+    user.kickUsername = '';
+    user.kickName = '';
+    user.kickUserId = '';
+    user.kickId = '';
+    user.kickAccessToken = '';
+    user.kickRefreshToken = '';
+    user.kickLinkedAt = '';
+    user.lastResetAccessAt = new Date().toISOString();
+  }
+
+  if (sessionId) {
+    data.sessions = data.sessions.filter((item) => {
+      return item.id !== sessionId && item.sessionId !== sessionId;
+    });
+  }
+
+  writeFenixData(data);
+
+  return res.json({
+    ok: true,
+    message: 'Acesso Fenix e Kick resetado. Vincule a Kick novamente.',
+    resetUser: user ? user.username : username || ''
   });
 });
 

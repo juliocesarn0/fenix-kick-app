@@ -18,6 +18,18 @@ let kickPopupAlreadyShown = false;
 
 const $ = (id) => document.getElementById(id);
 
+
+function getFenixDeviceId() {
+  let id = localStorage.getItem("fenixDeviceId");
+
+  if (!id) {
+    id = "fenix-device-" + Math.random().toString(16).slice(2) + "-" + Date.now();
+    localStorage.setItem("fenixDeviceId", id);
+  }
+
+  return id;
+}
+
 function normalizeUsername(name) {
   return String(name || "").trim();
 }
@@ -267,7 +279,7 @@ function updateKickStatus(logged) {
 
   $("kickDot").classList.toggle("ok", kickLoggedIn);
   $("kickDot").classList.toggle("bad", !kickLoggedIn);
-  $("kickStatus").textContent = kickLoggedIn ? "KICK LOGADA" : "KICK NAO LOGADA";
+  $("kickStatus").textContent = kickLoggedIn ? "KICK VINCULADA" : "KICK NAO VINCULADA";
   $("kickStatus").classList.toggle("ok", kickLoggedIn);
 }
 
@@ -335,7 +347,7 @@ async function loginFenix() {
     const res = await fetch(CONFIG.adminApi + "/api/fenix/auth/register-or-login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, password, deviceId: getFenixDeviceId() })
     });
 
     const data = await res.json();
@@ -618,7 +630,7 @@ async function checkKickLoggedFromView1() {
     if (logged) {
       updateKickStatus(true);
       showKickPopup();
-      setWarning("Kick logada detectada. Clique em Atualizar Telas para aplicar nas 3 telas.");
+      setWarning("Kick vinculada detectada. Clique em Atualizar Telas para aplicar nas 3 telas.");
     } else {
       kickPopupAlreadyShown = false;
       hideKickPopup();
@@ -675,23 +687,68 @@ function updateCycleTimer() {
   }
 }
 
-function clearLogin() {
-  const ok = confirm("Resetar login da Fenix e Kick neste app?");
+async function clearLogin() {
+  const ok = confirm("Resetar acesso completo? Isso vai limpar Fenix, Kick vinculada e login da Kick nas abas.");
   if (!ok) return;
+
+  const deviceId = typeof getFenixDeviceId === "function"
+    ? getFenixDeviceId()
+    : localStorage.getItem("fenixDeviceId");
+
+  const sessionId = fenixSession?.sessionId || "";
+
+  try {
+    if (sessionId) {
+      await fetch(CONFIG.adminApi + "/api/fenix/auth/reset-access", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ sessionId })
+      });
+    }
+  } catch (error) {
+    console.error("Erro ao resetar acesso no backend:", error);
+  }
+
+  try {
+    if (window.fenixDesktop && typeof window.fenixDesktop.clearAllAccess === "function") {
+      await window.fenixDesktop.clearAllAccess();
+    }
+  } catch (error) {
+    console.error("Erro ao limpar sessoes Electron:", error);
+  }
+
+  try {
+    for (const number of [1, 2, 3]) {
+      const view = $("view" + number);
+
+      if (view) {
+        try {
+          await view.executeJavaScript("localStorage.clear(); sessionStorage.clear();", true);
+        } catch {}
+
+        view.removeAttribute("src");
+        view.src = "about:blank";
+      }
+    }
+  } catch {}
+
+  fenixSession = null;
+  kickLoggedIn = false;
+  kickTabsLoggedIn = false;
 
   localStorage.clear();
   sessionStorage.clear();
 
-  fenixSession = null;
-  kickLoggedIn = false;
-  kickPopupAlreadyShown = false;
-
-  if (window.fenixDesktop && typeof window.fenixDesktop.resetLogin === "function") {
-    window.fenixDesktop.resetLogin();
-    return;
+  if (deviceId) {
+    localStorage.setItem("fenixDeviceId", deviceId);
   }
 
-  window.location.reload();
+  updateKickStatus(false);
+  updateKickTabsStatus(false);
+
+  location.reload();
 }
 
 
@@ -711,7 +768,7 @@ function renderAdminUsers(users) {
     const weeklyPoints = Number(user.weeklyPoints || 0);
     const totalMinutes = Number(user.totalMinutes || 0);
     const weeklyMinutes = Number(user.weeklyMinutes || 0);
-    const kickLogged = user.kickLoggedIn ? "Kick logada" : "Kick nao logada";
+    const kickLogged = user.kickLoggedIn ? "Kick vinculada" : "Kick nao vinculada";
     const role = user.role || (user.isAdmin ? "ADMIN" : "USER");
 
     return `
@@ -1647,4 +1704,158 @@ document.addEventListener("DOMContentLoaded", () => {
       adminBtn.remove();
     }
   }, 500);
+});
+
+
+/* FENIX_TABS_LOGIN_NOTICE_FINAL */
+let fenixTabsNoticeClosed = false;
+
+function showTabsLoginNotice() {
+  if (fenixTabsNoticeClosed) return;
+
+  const hasFenixUser =
+    typeof fenixSession !== "undefined" &&
+    fenixSession &&
+    fenixSession.user;
+
+  const tabsLogged =
+    typeof kickTabsLoggedIn !== "undefined" &&
+    Boolean(kickTabsLoggedIn);
+
+  if (!hasFenixUser || tabsLogged) return;
+
+  let notice = document.getElementById("fenixTabsLoginNotice");
+
+  if (!notice) {
+    notice = document.createElement("div");
+    notice.id = "fenixTabsLoginNotice";
+    notice.className = "fenix-tabs-login-notice";
+    notice.innerHTML =
+      '<div class="fenix-tabs-login-box">' +
+        '<h2>Login Kick nas abas</h2>' +
+        '<p>Sua conta Kick ja esta vinculada ao Fenix.</p>' +
+        '<p>Agora entre na Kick dentro das abas para liberar os pontos.</p>' +
+        '<button id="fenixTabsNoticeOk">Entendi</button>' +
+      '</div>';
+
+    document.body.appendChild(notice);
+
+    const ok = document.getElementById("fenixTabsNoticeOk");
+    if (ok) {
+      ok.onclick = () => {
+        fenixTabsNoticeClosed = true;
+        notice.style.display = "none";
+      };
+    }
+  }
+
+  notice.style.display = "flex";
+}
+
+const fenixOriginalUpdateKickTabsStatusNotice =
+  typeof updateKickTabsStatus === "function" ? updateKickTabsStatus : null;
+
+if (fenixOriginalUpdateKickTabsStatusNotice) {
+  updateKickTabsStatus = function(logged) {
+    fenixOriginalUpdateKickTabsStatusNotice(logged);
+
+    const notice = document.getElementById("fenixTabsLoginNotice");
+
+    if (logged) {
+      if (notice) notice.style.display = "none";
+      return;
+    }
+
+    setTimeout(showTabsLoginNotice, 800);
+  };
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(showTabsLoginNotice, 2500);
+});
+
+
+/* FENIX_RESET_LOGIN_TOTAL_FINAL */
+async function resetFenixAccessTotalFinal() {
+  const ok = confirm("Resetar acesso completo? Vai limpar Fenix, Kick vinculada e login das abas.");
+  if (!ok) return;
+
+  const currentUsername =
+    fenixSession?.user?.username ||
+    document.querySelector(".profile-name")?.innerText ||
+    document.querySelector("#userName")?.innerText ||
+    "";
+
+  const currentSessionId = fenixSession?.sessionId || "";
+
+  try {
+    await fetch(CONFIG.adminApi + "/api/fenix/auth/reset-access", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        sessionId: currentSessionId,
+        username: currentUsername
+      })
+    });
+  } catch (error) {
+    console.error("Erro reset backend:", error);
+  }
+
+  try {
+    if (window.fenixDesktop && typeof window.fenixDesktop.clearAllAccess === "function") {
+      await window.fenixDesktop.clearAllAccess();
+    }
+  } catch (error) {
+    console.error("Erro clearAllAccess:", error);
+  }
+
+  try {
+    for (const number of [1, 2, 3]) {
+      const view = document.getElementById("view" + number);
+
+      if (view) {
+        try {
+          await view.executeJavaScript("localStorage.clear(); sessionStorage.clear(); document.cookie.split(';').forEach(c => document.cookie = c.replace(/^ +/, '').replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/'));", true);
+        } catch {}
+
+        view.src = "about:blank";
+        view.removeAttribute("src");
+      }
+    }
+  } catch {}
+
+  fenixSession = null;
+  kickLoggedIn = false;
+  kickTabsLoggedIn = false;
+
+  const keepDeviceId = localStorage.getItem("fenixDeviceId");
+
+  localStorage.clear();
+  sessionStorage.clear();
+
+  if (keepDeviceId) {
+    localStorage.setItem("fenixDeviceId", keepDeviceId);
+  }
+
+  location.reload();
+}
+
+clearLogin = resetFenixAccessTotalFinal;
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(() => {
+    const resetBtn =
+      document.getElementById("resetLoginBtn") ||
+      document.getElementById("logoutBtn") ||
+      Array.from(document.querySelectorAll("button")).find((btn) => {
+        const text = String(btn.innerText || btn.textContent || "").toLowerCase();
+        return text.includes("resetar login");
+      });
+
+    if (resetBtn) {
+      resetBtn.onclick = resetFenixAccessTotalFinal;
+    }
+  }, 800);
 });
