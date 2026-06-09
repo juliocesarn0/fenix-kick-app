@@ -392,59 +392,40 @@ async function checkKickLoggedFromView1() {
   if (!view || !view.getAttribute("src")) {
     kickPopupAlreadyShown = false;
     hideKickPopup();
-    updateKickStatus(false);
+    updateKickStatus(Boolean(fenixSession?.user?.kickConnected || fenixSession?.user?.kickLoggedIn));
     return;
   }
 
   try {
     const logged = await view.executeJavaScript(`
-      (async () => {
-        async function checkEndpoint(url) {
-          try {
-            const response = await fetch(url, {
-              credentials: "include",
-              cache: "no-store"
-            });
+      (() => {
+        const imgs = Array.from(document.querySelectorAll("img"));
 
-            if (!response.ok) {
-              return false;
-            }
+        const hasTopRightAvatar = imgs.some((img) => {
+          const rect = img.getBoundingClientRect();
+          const src = String(img.src || "").toLowerCase();
+          const alt = String(img.alt || "").toLowerCase();
 
-            const data = await response.json().catch(() => null);
+          const visible =
+            rect.width >= 24 &&
+            rect.height >= 24 &&
+            rect.width <= 90 &&
+            rect.height <= 90;
 
-            if (!data || typeof data !== "object") {
-              return false;
-            }
+          const topRight =
+            rect.top >= 20 &&
+            rect.top <= 120 &&
+            rect.right >= (window.innerWidth - 130);
 
-            const user = data.user || data.data || data;
+          const notKickLogo =
+            !src.includes("kick") &&
+            !alt.includes("kick") &&
+            !src.includes("logo");
 
-            return Boolean(
-              user &&
-              (
-                user.id ||
-                user.username ||
-                user.slug ||
-                user.email
-              )
-            );
-          } catch (error) {
-            return false;
-          }
-        }
+          return visible && topRight && notKickLogo;
+        });
 
-        const loggedV2 = await checkEndpoint("/api/v2/user");
-
-        if (loggedV2) {
-          return true;
-        }
-
-        const loggedV1 = await checkEndpoint("/api/v1/user");
-
-        if (loggedV1) {
-          return true;
-        }
-
-        return false;
+        return Boolean(hasTopRightAvatar);
       })();
     `, true);
 
@@ -455,13 +436,13 @@ async function checkKickLoggedFromView1() {
     } else {
       kickPopupAlreadyShown = false;
       hideKickPopup();
-      updateKickStatus(false);
+      updateKickStatus(Boolean(fenixSession?.user?.kickConnected || fenixSession?.user?.kickLoggedIn));
       setWarning("LOGIN KICK OBRIGATORIO: entre na Kick dentro da Tela 1 e depois clique em Atualizar Telas.");
     }
   } catch {
     kickPopupAlreadyShown = false;
     hideKickPopup();
-    updateKickStatus(false);
+    updateKickStatus(Boolean(fenixSession?.user?.kickConnected || fenixSession?.user?.kickLoggedIn));
     setWarning("LOGIN KICK OBRIGATORIO: entre na Kick dentro da Tela 1 e depois clique em Atualizar Telas.");
   }
 }
@@ -815,9 +796,70 @@ function createAdminPanel() {
   modal.classList.add("show");
 }
 
+
+async function refreshFenixMe() {
+  if (!fenixSession?.sessionId) return;
+
+  try {
+    const res = await fetch(CONFIG.adminApi + "/api/fenix/app/me?sessionId=" + encodeURIComponent(fenixSession.sessionId), {
+      cache: "no-store"
+    });
+
+    const data = await res.json();
+
+    if (res.ok && data.ok && data.user) {
+      fenixSession.user = data.user;
+      localStorage.setItem("fenixSession", JSON.stringify(fenixSession));
+      updateUserUi(data.user);
+      updateKickStatus(Boolean(data.user.kickConnected || data.user.kickLoggedIn));
+
+      if (data.user.kickConnected) {
+        setWarning("Kick conectada ao Fenix: " + (data.user.kickUsername || ""));
+      }
+    }
+  } catch {}
+}
+
+async function connectKickOAuth() {
+  if (!fenixSession?.sessionId) {
+    alert("Entre na conta Fenix primeiro.");
+    return;
+  }
+
+  try {
+    const res = await fetch(CONFIG.adminApi + "/api/fenix/kick/connect-url?sessionId=" + encodeURIComponent(fenixSession.sessionId), {
+      cache: "no-store"
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data.ok || !data.url) {
+      throw new Error(data.message || "Nao foi possivel iniciar login Kick.");
+    }
+
+    if (window.fenixDesktop && typeof window.fenixDesktop.openExternal === "function") {
+      await window.fenixDesktop.openExternal(data.url);
+    } else {
+      window.open(data.url, "_blank");
+    }
+
+    setWarning("Login Kick aberto. Depois de autorizar, volte ao Fenix Lurk e clique em Atualizar Telas.");
+
+    setTimeout(refreshFenixMe, 4000);
+    setTimeout(refreshFenixMe, 9000);
+    setTimeout(refreshFenixMe, 15000);
+  } catch (error) {
+    alert(error.message || String(error));
+  }
+}
+
 function setupEvents() {
   $("loginBtn").addEventListener("click", loginFenix);
-  $("refreshScreensBtn").addEventListener("click", refreshScreens);
+  $("connectKickBtn").addEventListener("click", connectKickOAuth);
+  $("refreshScreensBtn").addEventListener("click", async () => {
+    await refreshFenixMe();
+    await refreshScreens();
+  });
   $("popupRefreshBtn").addEventListener("click", async () => {
     hideKickPopup();
     await refreshScreens();
@@ -846,7 +888,7 @@ function setupEvents() {
 document.addEventListener("DOMContentLoaded", async () => {
   setupEvents();
   updateAdminButtonVisibility(null);
-  updateKickStatus(false);
+  updateKickStatus(Boolean(fenixSession?.user?.kickConnected || fenixSession?.user?.kickLoggedIn));
 
   const restored = restoreSession();
 
@@ -860,11 +902,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   cycleTimer = setInterval(updateCycleTimer, 1000);
 
   setInterval(loadSchedule, CONFIG.refreshSeconds * 1000);
+
+  // FENIX_BACKEND_KICK_STATUS_TIMER
+  setInterval(refreshFenixMe, 15000);
   setInterval(muteAllWebviews, 5000);
 
   // FENIX_RECHECK_KICK_LOGIN_TIMER
   setInterval(checkKickLoggedFromView1, 15000);
 });
+
+
 
 
 

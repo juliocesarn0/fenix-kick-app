@@ -437,6 +437,48 @@ function fenixSlotToDesktopSlots(slot) {
   });
 }
 
+
+function fenixBase64Url(buffer) {
+  return Buffer.from(buffer)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function createKickCodeVerifier() {
+  return fenixBase64Url(crypto.randomBytes(32));
+}
+
+function createKickCodeChallenge(verifier) {
+  return fenixBase64Url(crypto.createHash('sha256').update(verifier).digest());
+}
+
+function safeKickUserPayload(payload) {
+  const rawUser = Array.isArray(payload?.data) ? payload.data[0] : payload?.data || payload?.user || payload;
+
+  return {
+    id: String(rawUser?.id || rawUser?.user_id || ''),
+    username: String(rawUser?.username || rawUser?.name || rawUser?.slug || rawUser?.channel_slug || ''),
+    slug: String(rawUser?.slug || rawUser?.channel_slug || rawUser?.username || '')
+  };
+}
+
+function publicFenixUser(user) {
+  return {
+    username: user.username,
+    role: user.role,
+    isAdmin: user.role === 'ADMIN',
+    points: Number(user.points || 0),
+    weeklyPoints: Number(user.weeklyPoints || 0),
+    totalMinutes: Number(user.totalMinutes || 0),
+    weeklyMinutes: Number(user.weeklyMinutes || 0),
+    kickLoggedIn: Boolean(user.kickLoggedIn),
+    kickConnected: Boolean(user.kickConnected),
+    kickUsername: user.kickUsername || ''
+  };
+}
+
 function requireFenixAdmin(req, res, next) {
   const adminUsername =
     req.headers['x-fenix-admin'] ||
@@ -547,7 +589,9 @@ app.post('/api/fenix/auth/register-or-login', (req, res) => {
       weeklyPoints: user.weeklyPoints,
       totalMinutes: user.totalMinutes,
       weeklyMinutes: user.weeklyMinutes,
-      kickLoggedIn: user.kickLoggedIn
+      kickLoggedIn: user.kickLoggedIn,
+      kickConnected: Boolean(user.kickConnected),
+      kickUsername: user.kickUsername || ''
     }
   });
 });
@@ -591,8 +635,176 @@ app.post('/api/fenix/app/heartbeat', (req, res) => {
       weeklyPoints: user.weeklyPoints,
       totalMinutes: user.totalMinutes,
       weeklyMinutes: user.weeklyMinutes,
-      kickLoggedIn: user.kickLoggedIn
+      kickLoggedIn: user.kickLoggedIn,
+      kickConnected: Boolean(user.kickConnected),
+      kickUsername: user.kickUsername || ''
     }
+  });
+});
+
+
+// FENIX_KICK_OAUTH_ROUTES
+app.get('/api/fenix/kick/connect-url', (req, res) => {
+  const sessionId = String(req.query?.sessionId || '').trim();
+
+  if (!KICK_CLIENT_ID || !KICK_CLIENT_SECRET) {
+    return res.status(500).json({
+      ok: false,
+      message: 'Kick OAuth nao configurado no servidor.'
+    });
+  }
+
+  const data = readFenixData();
+  const session = data.sessions.find((item) => item.id === sessionId);
+
+  if (!session) {
+    return res.status(401).json({
+      ok: false,
+      message: 'Sessao Fenix invalida.'
+    });
+  }
+
+  const user = data.users.find((item) => item.id === session.userId);
+
+  if (!user) {
+    return res.status(404).json({
+      ok: false,
+      message: 'Usuario Fenix nao encontrado.'
+    });
+  }
+
+  const state = crypto.randomUUID();
+  const codeVerifier = createKickCodeVerifier();
+  const codeChallenge = createKickCodeChallenge(codeVerifier);
+
+  session.kickOAuthState = state;
+  session.kickCodeVerifier = codeVerifier;
+  session.kickOAuthStartedAt = new Date().toISOString();
+
+  writeFenixData(data);
+
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: KICK_CLIENT_ID,
+    redirect_uri: KICK_REDIRECT_URI,
+    scope: 'user:read',
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256'
+  });
+
+  res.json({
+    ok: true,
+    url: 'https://id.kick.com/oauth/authorize?' + params.toString()
+  });
+});
+
+app.get('/api/fenix/kick/callback', async (req, res) => {
+  const code = String(req.query?.code || '').trim();
+  const state = String(req.query?.state || '').trim();
+
+  if (!code || !state) {
+    return res.status(400).send('Kick OAuth invalido. Pode fechar esta janela.');
+  }
+
+  const data = readFenixData();
+  const session = data.sessions.find((item) => item.kickOAuthState === state);
+
+  if (!session) {
+    return res.status(401).send('Sessao Fenix nao encontrada. Volte ao app e tente novamente.');
+  }
+
+  const user = data.users.find((item) => item.id === session.userId);
+
+  if (!user) {
+    return res.status(404).send('Usuario Fenix nao encontrado. Volte ao app e tente novamente.');
+  }
+
+  try {
+    const tokenRes = await fetch('https://id.kick.com/oauth/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: KICK_CLIENT_ID,
+        client_secret: KICK_CLIENT_SECRET,
+        redirect_uri: KICK_REDIRECT_URI,
+        code,
+        code_verifier: session.kickCodeVerifier || ''
+      })
+    });
+
+    const tokenData = await tokenRes.json().catch(() => ({}));
+
+    if (!tokenRes.ok || !tokenData.access_token) {
+      return res.status(400).send('Erro ao conectar Kick. Volte ao app e tente novamente.');
+    }
+
+    const userRes = await fetch('https://api.kick.com/public/v1/users', {
+      headers: {
+        Authorization: 'Bearer ' + tokenData.access_token
+      }
+    });
+
+    const kickUserData = await userRes.json().catch(() => ({}));
+
+    if (!userRes.ok) {
+      return res.status(400).send('Nao foi possivel ler usuario da Kick.');
+    }
+
+    const kickUser = safeKickUserPayload(kickUserData);
+
+    user.kickConnected = true;
+    user.kickLoggedIn = true;
+    user.kickUserId = kickUser.id;
+    user.kickUsername = kickUser.username || kickUser.slug || 'Kick conectada';
+    user.kickLinkedAt = new Date().toISOString();
+
+    session.kickOAuthState = '';
+    session.kickCodeVerifier = '';
+    session.kickOAuthFinishedAt = new Date().toISOString();
+
+    writeFenixData(data);
+
+    res.send(`
+      <html>
+        <body style="background:#050508;color:#38ff74;font-family:Arial;text-align:center;padding-top:80px;">
+          <h1>Kick conectada com sucesso!</h1>
+          <p>Conta Kick: ${user.kickUsername}</p>
+          <p>Voce ja pode voltar para o Fenix Lurk.</p>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    res.status(500).send('Erro interno ao conectar Kick. Volte ao app e tente novamente.');
+  }
+});
+
+app.get('/api/fenix/app/me', (req, res) => {
+  const sessionId = String(req.query?.sessionId || '').trim();
+  const data = readFenixData();
+  const session = data.sessions.find((item) => item.id === sessionId);
+
+  if (!session) {
+    return res.status(401).json({ ok: false, message: 'Sessao invalida.' });
+  }
+
+  const user = data.users.find((item) => item.id === session.userId);
+
+  if (!user) {
+    return res.status(404).json({ ok: false, message: 'Usuario nao encontrado.' });
+  }
+
+  user.isOnline = true;
+  user.lastSeenAt = new Date().toISOString();
+
+  writeFenixData(data);
+
+  res.json({
+    ok: true,
+    user: publicFenixUser(user)
   });
 });
 
@@ -737,7 +949,9 @@ app.post('/api/fenix/app/complete-cycle', (req, res) => {
       weeklyPoints: user.weeklyPoints,
       totalMinutes: user.totalMinutes,
       weeklyMinutes: user.weeklyMinutes,
-      kickLoggedIn: user.kickLoggedIn
+      kickLoggedIn: user.kickLoggedIn,
+      kickConnected: Boolean(user.kickConnected),
+      kickUsername: user.kickUsername || ''
     }
   });
 });
@@ -754,6 +968,8 @@ app.get('/api/fenix/admin/online-users', requireFenixAdmin, (req, res) => {
       role: user.role,
       isOnline: user.isOnline && lastSeen >= limitDate,
       kickLoggedIn: user.kickLoggedIn,
+      kickConnected: Boolean(user.kickConnected),
+      kickUsername: user.kickUsername || '',
       points: user.points,
       weeklyPoints: user.weeklyPoints,
       totalMinutes: user.totalMinutes,
@@ -978,6 +1194,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 

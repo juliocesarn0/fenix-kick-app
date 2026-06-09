@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, Menu, ipcMain, session } = require("electron");
+﻿const { app, BrowserWindow, Menu, ipcMain, session, shell } = require("electron");
 const path = require("path");
 const fenixUserDataPath = path.join(app.getPath("appData"), "Fenix Lurk");
 
@@ -132,3 +132,14 @@ ipcMain.handle("fenix:is-kick-logged-in", async () => {
 });
 
 
+
+ipcMain.handle("fenix:open-external", async (event, url) => {
+  const safeUrl = String(url || "");
+
+  if (safeUrl.startsWith("https://id.kick.com/") || safeUrl.startsWith("https://kick.com/")) {
+    await shell.openExternal(safeUrl);
+    return true;
+  }
+
+  return false;
+});
