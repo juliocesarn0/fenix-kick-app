@@ -1,6 +1,6 @@
 {
   "name": "fenix-kick-app",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Fenix - painel Kick API pronto para Railway",
   "main": "desktop/main.cjs",
   "type": "module",
@@ -50,7 +50,8 @@
         "owner": "FluxoViewers",
         "repo": "fenix-kick-app"
       }
-    ]
+    ],
+    "artifactName": "Fenix.Lurk.Setup.${version}.${ext}"
   },
   "productName": "Fenix Lurk",
   "author": "GokuuMods"

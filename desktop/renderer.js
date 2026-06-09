@@ -1961,9 +1961,60 @@ document.addEventListener("DOMContentLoaded", () => {
   setInterval(fenixEnsureResetExitButtonFinal, 3000);
 });
 
+
 /* FENIX_APP_FAST_HEARTBEAT_RENDERER_FINAL */
+function getFenixHeartbeatSessionId() {
+  try {
+    if (fenixSession && fenixSession.sessionId) {
+      return fenixSession.sessionId;
+    }
+  } catch {}
+
+  try {
+    const directKeys = [
+      "fenixSession",
+      "fenix_session",
+      "fenixUser",
+      "fenix_user",
+      "session",
+      "user"
+    ];
+
+    for (const key of directKeys) {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.sessionId) return parsed.sessionId;
+        if (parsed && parsed.session && parsed.session.sessionId) return parsed.session.sessionId;
+      } catch {}
+    }
+
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      const raw = localStorage.getItem(key);
+
+      if (!raw || !String(raw).includes("sessionId")) continue;
+
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.sessionId) return parsed.sessionId;
+        if (parsed && parsed.session && parsed.session.sessionId) return parsed.session.sessionId;
+      } catch {}
+    }
+  } catch {}
+
+  return "";
+}
+
 async function sendFenixFastHeartbeat() {
-  if (!fenixSession?.sessionId) return;
+  const sessionId = getFenixHeartbeatSessionId();
+
+  if (!sessionId) {
+    console.warn("Heartbeat Fenix ignorado: sessionId nao encontrado.");
+    return;
+  }
 
   try {
     await fetch(CONFIG.adminApi + "/api/fenix/app/heartbeat", {
@@ -1972,7 +2023,7 @@ async function sendFenixFastHeartbeat() {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        sessionId: fenixSession.sessionId,
+        sessionId,
         tabsLoggedIn: Boolean(kickTabsLoggedIn)
       })
     });
@@ -1982,7 +2033,8 @@ async function sendFenixFastHeartbeat() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  setTimeout(sendFenixFastHeartbeat, 5000);
+  setTimeout(sendFenixFastHeartbeat, 3000);
+  setTimeout(sendFenixFastHeartbeat, 8000);
   setInterval(sendFenixFastHeartbeat, 30000);
 });
 
@@ -2100,4 +2152,159 @@ function fenixEnsureCompactUpdateButton() {
 
 document.addEventListener("DOMContentLoaded", () => {
   setTimeout(fenixEnsureCompactUpdateButton, 1000);
+});
+
+
+/* FENIX_FORCE_SCHEDULE_URLS_FINAL */
+let fenixLastScheduleSlots = [];
+
+function fenixNormalizeUrl(value) {
+  return String(value || "").trim().replace(/\/+$/, "").toLowerCase();
+}
+
+function fenixIsKickHome(value) {
+  const url = fenixNormalizeUrl(value);
+  return url === "https://kick.com" || url === "https://www.kick.com" || url === "kick.com";
+}
+
+function fenixGetWebviewUrl(view) {
+  try {
+    if (view && typeof view.getURL === "function") {
+      return view.getURL() || "";
+    }
+  } catch {}
+
+  return view?.getAttribute("src") || view?.src || "";
+}
+
+function fenixApplyWebviewNoThrottle(view) {
+  if (!view) return;
+
+  try {
+    view.setAttribute("webpreferences", "backgroundThrottling=no, autoplayPolicy=no-user-gesture-required");
+  } catch {}
+
+  try {
+    view.setAttribute("allowpopups", "true");
+  } catch {}
+}
+
+async function fenixFetchScheduleSlots() {
+  const res = await fetch(CONFIG.adminApi + "/api/fenix/app/current-schedule", {
+    cache: "no-store"
+  });
+
+  const data = await res.json();
+
+  if (!res.ok || data.ok === false) {
+    throw new Error(data.message || "Erro ao carregar grade.");
+  }
+
+  fenixLastScheduleSlots = Array.isArray(data.slots) ? data.slots : [];
+  return fenixLastScheduleSlots;
+}
+
+function fenixTargetUrlForView(number, slots) {
+  const slot = (slots || fenixLastScheduleSlots || []).find((item) => Number(item.id) === Number(number));
+
+  if (slot && slot.active && !slot.maintenance && slot.url) {
+    return String(slot.url || "").trim();
+  }
+
+  return "https://kick.com/";
+}
+
+async function fenixForceScheduleUrls() {
+  try {
+    const slots = await fenixFetchScheduleSlots();
+
+    [1, 2, 3].forEach((number) => {
+      const view = $("view" + number);
+      if (!view) return;
+
+      fenixApplyWebviewNoThrottle(view);
+
+      const targetUrl = fenixTargetUrlForView(number, slots);
+      const currentUrl = fenixGetWebviewUrl(view);
+
+      if (fenixNormalizeUrl(currentUrl) !== fenixNormalizeUrl(targetUrl)) {
+        view.setAttribute("src", targetUrl);
+        view.src = targetUrl;
+      } else {
+        try {
+          view.reload();
+        } catch {}
+      }
+
+      try {
+        muteWebview(view);
+      } catch {}
+    });
+
+    setTimeout(() => {
+      try {
+        muteAllWebviews();
+      } catch {}
+    }, 1200);
+
+    return true;
+  } catch (error) {
+    console.error("Erro ao forcar URLs da grade:", error);
+    return false;
+  }
+}
+
+function fenixRepairKickHomeIfNeeded() {
+  try {
+    [1, 2, 3].forEach((number) => {
+      const view = $("view" + number);
+      if (!view) return;
+
+      fenixApplyWebviewNoThrottle(view);
+
+      const targetUrl = fenixTargetUrlForView(number, fenixLastScheduleSlots);
+      const currentUrl = fenixGetWebviewUrl(view);
+
+      if (!targetUrl || fenixIsKickHome(targetUrl)) return;
+
+      if (fenixIsKickHome(currentUrl)) {
+        view.setAttribute("src", targetUrl);
+        view.src = targetUrl;
+        try {
+          muteWebview(view);
+        } catch {}
+      }
+    });
+  } catch (error) {
+    console.error("Erro reparando kick home:", error);
+  }
+}
+
+if (typeof refreshScreens === "function") {
+  refreshScreens = async function() {
+    await loadSchedule();
+    await fenixForceScheduleUrls();
+
+    setTimeout(() => {
+      try {
+        checkKickTabsLoggedIn();
+      } catch {}
+    }, 2500);
+  };
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(() => {
+    try {
+      [1, 2, 3].forEach((number) => fenixApplyWebviewNoThrottle($("view" + number)));
+    } catch {}
+  }, 800);
+
+  setTimeout(() => {
+    try {
+      fenixFetchScheduleSlots();
+    } catch {}
+  }, 2000);
+
+  setInterval(fenixRepairKickHomeIfNeeded, 60000);
 });

@@ -1,7 +1,16 @@
 ﻿const { autoUpdater } = require("electron-updater");
-const { app, BrowserWindow, Menu, ipcMain, session, shell } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, session, shell, powerSaveBlocker } = require("electron");
 const path = require("path");
 const fenixUserDataPath = path.join(app.getPath("appData"), "Fenix Lurk");
+
+// FENIX_NO_BACKGROUND_THROTTLE_FINAL
+app.commandLine.appendSwitch("disable-renderer-backgrounding");
+app.commandLine.appendSwitch("disable-background-timer-throttling");
+app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+app.commandLine.appendSwitch("disable-features", "CalculateNativeWinOcclusion,IntensiveWakeUpThrottling,BackForwardCache");
+app.commandLine.appendSwitch("disable-hang-monitor");
+
 
 app.setName("Fenix Lurk");
 app.setPath("userData", fenixUserDataPath);
@@ -20,7 +29,8 @@ function createWindow() {
     backgroundColor: "#07070a",
     show: false,
     autoHideMenuBar: true,
-    webPreferences: { preload: path.join(__dirname, "preload.cjs"),
+    webPreferences: {
+      backgroundThrottling: false, preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: true,
@@ -181,7 +191,24 @@ ipcMain.handle("fenix:update-install", async () => {
   }
 });
 
+
+
+// FENIX_POWER_SAVE_BLOCKER_FINAL
+let fenixPowerSaveBlockerId = null;
+
+function startFenixPowerSaveBlocker() {
+  try {
+    if (powerSaveBlocker && (fenixPowerSaveBlockerId === null || !powerSaveBlocker.isStarted(fenixPowerSaveBlockerId))) {
+      fenixPowerSaveBlockerId = powerSaveBlocker.start("prevent-app-suspension");
+      console.log("Fenix powerSaveBlocker ativo:", fenixPowerSaveBlockerId);
+    }
+  } catch (error) {
+    console.error("Erro powerSaveBlocker:", error);
+  }
+}
+
 app.whenReady().then(() => {
+  startFenixPowerSaveBlocker();
   setupFenixAutoUpdater();
   app.setAppUserModelId("com.fenix.lurk");
   createWindow();
