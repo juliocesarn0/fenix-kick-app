@@ -1104,29 +1104,44 @@ app.post('/api/fenix/app/heartbeat', (req, res) => {
   }
 
   const now = new Date().toISOString();
-  const kickConnected = Boolean(user.kickConnected || user.kickLoggedIn);
-  const tabsLoggedIn = Boolean(req.body?.tabsLoggedIn);
+  const kickConnected = Boolean(user.kickConnected || user.kickLoggedIn || user.kickUsername || user.kickName);
+  const tabsLoggedIn = Boolean(req.body?.tabsLoggedIn || req.body?.tabsKickLoggedIn);
   const farmOk = Boolean(kickConnected && tabsLoggedIn);
+
+  session.lastSeenAt = now;
+  session.updatedAt = now;
+  session.kickLoggedIn = kickConnected;
+  session.tabsLoggedIn = tabsLoggedIn;
+
+  user.isOnline = true;
+  user.lastSeenAt = now;
+  user.updatedAt = now;
+  user.kickLoggedIn = kickConnected;
 
   const heartbeat = {
     userId: user.id,
     username: user.username,
     kickUsername: user.kickUsername || user.kickName || '',
+    sessionId: session.id || session.sessionId || sessionId,
     appOnline: true,
     kickConnected,
     tabsLoggedIn,
     farmOk,
+    reason: String(req.body?.reason || ''),
     lastSeenAt: now,
     updatedAt: now
   };
 
-  const existing = data.farmHeartbeats.find((item) => {
+  const existingIndex = data.farmHeartbeats.findIndex((item) => {
     return item.userId === user.id ||
       String(item.username || '').toLowerCase() === String(user.username || '').toLowerCase();
   });
 
-  if (existing) {
-    Object.assign(existing, heartbeat);
+  if (existingIndex >= 0) {
+    data.farmHeartbeats[existingIndex] = {
+      ...data.farmHeartbeats[existingIndex],
+      ...heartbeat
+    };
   } else {
     data.farmHeartbeats.push(heartbeat);
   }
@@ -1138,7 +1153,6 @@ app.post('/api/fenix/app/heartbeat', (req, res) => {
     heartbeat
   });
 });
-
 
 // FENIX_ADMIN_ONLINE_USERS_FAST_HEARTBEAT_FINAL
 app.get('/api/fenix/admin/online-users', requireFenixAdmin, (req, res) => {
@@ -1200,7 +1214,17 @@ app.get('/api/fenix/admin/online-users', requireFenixAdmin, (req, res) => {
     const heartbeat = findHeartbeat(user);
     const lastCycle = findLastCycleForUser(user);
 
-    const lastSeenAt = heartbeat?.lastSeenAt || heartbeat?.updatedAt || null;
+    const userSession = data.sessions.find((session) => {
+      return session.userId === user.id ||
+        String(session.username || '').toLowerCase() === String(user.username || '').toLowerCase();
+    }) || null;
+
+    const lastSeenAt =
+      heartbeat?.lastSeenAt ||
+      heartbeat?.updatedAt ||
+      userSession?.lastSeenAt ||
+      user.lastSeenAt ||
+      null;
     const lastSeenMinutes = minutesAgo(lastSeenAt);
 
     const lastCycleAt =
