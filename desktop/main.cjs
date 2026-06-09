@@ -1,5 +1,10 @@
 ﻿const { app, BrowserWindow, Menu, ipcMain, session } = require("electron");
 const path = require("path");
+const fenixUserDataPath = path.join(app.getPath("appData"), "Fenix Lurk");
+
+app.setName("Fenix Lurk");
+app.setPath("userData", fenixUserDataPath);
+
 
 let mainWindow = null;
 
@@ -84,4 +89,5 @@ ipcMain.handle("fenix:focus-login", async () => {
 
   return true;
 });
+
 
