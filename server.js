@@ -600,7 +600,7 @@ app.get('/api/fenix/app/current-schedule', (req, res) => {
   const data = readFenixData();
 
   const slot = getCurrentFenixSlot(data);
-  const notice = data.notices.find((item) => item.active !== false) || null;
+  const notice = [...data.notices].reverse().find((item) => item.active !== false) || null;
 
   res.json({
     ok: true,
@@ -978,6 +978,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
