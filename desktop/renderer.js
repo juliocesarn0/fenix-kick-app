@@ -1631,3 +1631,20 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }, 2500);
 });
+
+/* FENIX_REMOVE_ADMIN_BUTTON_FROM_APP_FINAL */
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(() => {
+    const adminBtn =
+      document.getElementById("adminBtn") ||
+      Array.from(document.querySelectorAll("button")).find((btn) => {
+        const text = String(btn.innerText || btn.textContent || "").toLowerCase();
+        return text.includes("admin") || text.includes("painel admin");
+      });
+
+    if (adminBtn) {
+      adminBtn.style.display = "none";
+      adminBtn.remove();
+    }
+  }, 500);
+});

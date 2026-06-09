@@ -1009,3 +1009,13 @@ webview {
 .fenix-kick-login-instruction {
   display: none !important;
 }
+
+/* FENIX_REMOVE_ADMIN_FROM_APP_FINAL */
+#adminBtn,
+.admin-btn,
+button[data-admin],
+button[aria-label="Admin"],
+button[title="Admin"] {
+  display: none !important;
+}
+
