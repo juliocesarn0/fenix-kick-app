@@ -10,6 +10,7 @@
 
 let fenixSession = null;
 let kickLoggedIn = false;
+let kickTabsLoggedIn = false;
 let currentSlots = [];
 let cycleLeft = CONFIG.cycleSeconds;
 let cycleTimer = null;
@@ -91,6 +92,176 @@ function setWarning(message) {
   $("warningBar").textContent = sanitizeFenixText(message);
 }
 
+
+function updateKickTabsStatus(logged) {
+  kickTabsLoggedIn = Boolean(logged);
+
+  let dot = document.getElementById("kickTabsDot");
+  let label = document.getElementById("kickTabsStatus");
+
+  if (!dot || !label) {
+    const leftTop = document.querySelector(".left-top");
+
+    if (!leftTop) return;
+
+    dot = document.createElement("div");
+    dot.id = "kickTabsDot";
+    dot.className = "dot bad";
+
+    label = document.createElement("span");
+    label.id = "kickTabsStatus";
+    label.textContent = "ABAS NAO LOGADAS";
+    label.style.color = "#ff4a4a";
+
+    leftTop.appendChild(dot);
+    leftTop.appendChild(label);
+  }
+
+  dot.classList.toggle("ok", kickTabsLoggedIn);
+  dot.classList.toggle("bad", !kickTabsLoggedIn);
+
+  label.textContent = kickTabsLoggedIn ? "ABAS LOGADAS" : "ABAS NAO LOGADAS";
+  label.style.color = kickTabsLoggedIn ? "#38ff74" : "#ff4a4a";
+}
+
+async function checkOneKickTabLogged(view) {
+  if (!view || !view.getAttribute("src")) return false;
+
+  try {
+    return await view.executeJavaScript(`
+      (async () => {
+        async function apiUserLogged(url) {
+          try {
+            const response = await fetch(url, {
+              credentials: "include",
+              cache: "no-store"
+            });
+
+            if (!response.ok) return false;
+
+            const data = await response.json().catch(() => null);
+            if (!data || typeof data !== "object") return false;
+
+            const user = data.user || data.data || data;
+
+            return Boolean(
+              user &&
+              (
+                user.id ||
+                user.username ||
+                user.slug ||
+                user.email
+              )
+            );
+          } catch {
+            return false;
+          }
+        }
+
+        const apiV2 = await apiUserLogged("/api/v2/user");
+        if (apiV2) return true;
+
+        const apiV1 = await apiUserLogged("/api/v1/user");
+        if (apiV1) return true;
+
+        const storageKeys = [];
+        const storageValues = [];
+
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = String(localStorage.key(i) || "").toLowerCase();
+            const value = String(localStorage.getItem(localStorage.key(i)) || "").toLowerCase();
+
+            storageKeys.push(key);
+            storageValues.push(value);
+          }
+        } catch {}
+
+        try {
+          for (let i = 0; i < sessionStorage.length; i++) {
+            const key = String(sessionStorage.key(i) || "").toLowerCase();
+            const value = String(sessionStorage.getItem(sessionStorage.key(i)) || "").toLowerCase();
+
+            storageKeys.push(key);
+            storageValues.push(value);
+          }
+        } catch {}
+
+        const hasAuthStorage = storageKeys.concat(storageValues).some((item) => {
+          return (
+            item.includes("access_token") ||
+            item.includes("auth_token") ||
+            item.includes("bearer") ||
+            item.includes("kick_session") ||
+            item.includes("user_session")
+          );
+        });
+
+        if (hasAuthStorage) return true;
+
+        const bodyText = document.body ? document.body.innerText.toLowerCase() : "";
+
+        const hasLoginText =
+          bodyText.includes("log in") ||
+          bodyText.includes("login") ||
+          bodyText.includes("sign up") ||
+          bodyText.includes("entrar") ||
+          bodyText.includes("criar conta");
+
+        if (hasLoginText) return false;
+
+        const candidates = Array.from(document.querySelectorAll("img, button, a, div"));
+
+        const hasRealTopAvatar = candidates.some((el) => {
+          const rect = el.getBoundingClientRect();
+          const html = String(el.outerHTML || "").toLowerCase();
+          const tag = String(el.tagName || "").toLowerCase();
+          const src = String(el.getAttribute("src") || "").toLowerCase();
+          const alt = String(el.getAttribute("alt") || "").toLowerCase();
+          const style = window.getComputedStyle(el);
+          const bg = String(style.backgroundImage || "").toLowerCase();
+
+          const inTopRight =
+            rect &&
+            rect.width >= 20 &&
+            rect.height >= 20 &&
+            rect.width <= 130 &&
+            rect.height <= 130 &&
+            rect.top >= 5 &&
+            rect.top <= 190 &&
+            rect.right >= (window.innerWidth - 210);
+
+          if (!inTopRight) return false;
+
+          const hasImage = tag === "img" || html.includes("<img") || bg.includes("url(");
+          const isKickLogo = src.includes("kick-logo") || alt.includes("kick") || html.includes("kick-logo");
+          const isSvgOnly = html.includes("<svg") && !html.includes("<img") && !bg.includes("url(");
+
+          return hasImage && !isKickLogo && !isSvgOnly;
+        });
+
+        return Boolean(hasRealTopAvatar);
+      })();
+    `, true);
+  } catch {
+    return false;
+  }
+}
+
+async function checkKickTabsLoggedIn() {
+  const view1 = $("view1");
+  const logged = await checkOneKickTabLogged(view1);
+
+  updateKickTabsStatus(logged);
+
+  if (logged) {
+    setWarning("Kick conectada ao Fenix e login detectado dentro das abas.");
+  } else {
+    setWarning("LOGIN KICK OBRIGATORIO: entre na Kick dentro da Tela 1 para liberar os pontos.");
+  }
+
+  return logged;
+}
 function updateKickStatus(logged) {
   kickLoggedIn = Boolean(logged);
 
@@ -459,7 +630,8 @@ async function completeCycle() {
       body: JSON.stringify({
         sessionId: fenixSession.sessionId,
         cycleKey,
-        kickLoggedIn: true
+        kickLoggedIn: kickTabsLoggedIn,
+        tabsKickLoggedIn: kickTabsLoggedIn
       })
     });
 
@@ -797,6 +969,34 @@ function createAdminPanel() {
 }
 
 
+
+function clearInvalidFenixSession(message = "Sessao Fenix expirada. Entre novamente.") {
+  localStorage.removeItem("fenixSession");
+  sessionStorage.clear();
+
+  fenixSession = null;
+  kickLoggedIn = false;
+  kickPopupAlreadyShown = false;
+
+  hideKickPopup();
+  updateKickStatus(false);
+  showKickConnectGate(false);
+  showLoginGate(true);
+
+  const loginError = $("loginError");
+  if (loginError) {
+    loginError.textContent = message;
+  }
+
+  setTimeout(() => {
+    const input = $("loginUsername");
+    if (input) {
+      input.focus();
+      input.click();
+    }
+  }, 250);
+}
+
 async function refreshFenixMe() {
   if (!fenixSession?.sessionId) return;
 
@@ -805,7 +1005,12 @@ async function refreshFenixMe() {
       cache: "no-store"
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+
+    if (res.status === 401 || res.status === 404 || data.message === "Sessao invalida.") {
+      clearInvalidFenixSession("Sessao Fenix expirada. Entre novamente.");
+      return;
+    }
 
     if (res.ok && data.ok && data.user) {
       fenixSession.user = data.user;
@@ -822,7 +1027,7 @@ async function refreshFenixMe() {
 
 async function connectKickOAuth() {
   if (!fenixSession?.sessionId) {
-    alert("Entre na conta Fenix primeiro.");
+    clearInvalidFenixSession("Entre na conta Fenix primeiro.");
     return;
   }
 
@@ -831,7 +1036,12 @@ async function connectKickOAuth() {
       cache: "no-store"
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+
+    if (res.status === 401 || res.status === 404 || data.message === "Sessao Fenix invalida.") {
+      clearInvalidFenixSession("Sessao Fenix expirada. Entre novamente.");
+      return;
+    }
 
     if (!res.ok || !data.ok || !data.url) {
       throw new Error(data.message || "Nao foi possivel iniciar login Kick.");
@@ -855,14 +1065,19 @@ async function connectKickOAuth() {
 
 function setupEvents() {
   $("loginBtn").addEventListener("click", loginFenix);
-  $("connectKickBtn").addEventListener("click", connectKickOAuth);
+  const connectKickBtn = $("connectKickBtn");
+  if (connectKickBtn) {
+    connectKickBtn.addEventListener("click", connectKickOAuth);
+  }
   $("refreshScreensBtn").addEventListener("click", async () => {
     await refreshFenixMe();
     await refreshScreens();
+    await checkKickTabsLoggedIn();
   });
   $("popupRefreshBtn").addEventListener("click", async () => {
     hideKickPopup();
     await refreshScreens();
+    await checkKickTabsLoggedIn();
   });
   $("qualityBtn").addEventListener("click", applyModoLeve);
   $("exitBtn").addEventListener("click", () => window.close());
@@ -887,6 +1102,7 @@ function setupEvents() {
 
 document.addEventListener("DOMContentLoaded", async () => {
   setupEvents();
+  updateKickTabsStatus(false);
   updateAdminButtonVisibility(null);
   updateKickStatus(Boolean(fenixSession?.user?.kickConnected || fenixSession?.user?.kickLoggedIn));
 
@@ -907,6 +1123,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   setInterval(refreshFenixMe, 15000);
   setInterval(muteAllWebviews, 5000);
 
+  // FENIX_RECHECK_TABS_LOGIN_TIMER
+  setInterval(checkKickTabsLoggedIn, 15000);
+
   // FENIX_RECHECK_KICK_LOGIN_TIMER
   setInterval(checkKickLoggedFromView1, 15000);
 });
@@ -924,6 +1143,132 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 
 
+
+
+
+
+
+
+
+// FENIX_KICK_CONNECT_GATE_FINAL
+function isFenixKickConnected() {
+  return Boolean(
+    fenixSession &&
+    fenixSession.user &&
+    (
+      fenixSession.user.kickConnected ||
+      fenixSession.user.kickLoggedIn ||
+      fenixSession.user.kickUsername
+    )
+  );
+}
+
+function showKickConnectGate(show) {
+  let gate = document.getElementById("kickConnectGate");
+
+  if (!gate) {
+    gate = document.createElement("div");
+    gate.id = "kickConnectGate";
+    gate.className = "kick-connect-gate";
+    gate.innerHTML = `
+      <div class="kick-connect-card">
+        <div class="kick-connect-logo">FENIX LURK</div>
+        <h2>Conectar Kick obrigatorio</h2>
+        <p>
+          Para usar o Fenix Lurk, primeiro vincule sua conta Kick oficial.
+          Depois disso, entre na Kick dentro das telas do app para liberar o farm.
+        </p>
+
+        <div class="kick-connect-steps">
+          <div><b>1</b><span>Conecte sua conta Kick</span></div>
+          <div><b>2</b><span>Volte para o Fenix Lurk</span></div>
+          <div><b>3</b><span>Entre na Kick dentro das telas</span></div>
+        </div>
+
+        <button id="kickGateConnectBtn">Conectar Kick</button>
+        <button id="kickGateRefreshBtn">Ja conectei, atualizar</button>
+
+        <small id="kickGateStatusText">
+          A pontuacao so comeca depois que a Kick estiver vinculada ao Fenix.
+        </small>
+      </div>
+    `;
+
+    document.body.appendChild(gate);
+
+    document.getElementById("kickGateConnectBtn").addEventListener("click", connectKickOAuth);
+
+    document.getElementById("kickGateRefreshBtn").addEventListener("click", async () => {
+      const statusText = document.getElementById("kickGateStatusText");
+      statusText.textContent = "Verificando conexao Kick...";
+      await refreshFenixMe();
+
+      if (isFenixKickConnected()) {
+        statusText.textContent = "Kick conectada. Liberando app...";
+        showKickConnectGate(false);
+        await loadSchedule();
+      } else {
+        statusText.textContent = "Kick ainda nao vinculada. Clique em Conectar Kick.";
+      }
+    });
+  }
+
+  gate.classList.toggle("show", Boolean(show));
+
+  if (show) {
+    updateKickStatus(false);
+    setWarning("Conecte sua conta Kick ao Fenix para liberar o app.");
+  }
+}
+
+const fenixOriginalRefreshFenixMe = refreshFenixMe;
+refreshFenixMe = async function () {
+  await fenixOriginalRefreshFenixMe();
+
+  if (!fenixSession?.sessionId) {
+    showKickConnectGate(false);
+    return;
+  }
+
+  if (isFenixKickConnected()) {
+    showKickConnectGate(false);
+    updateKickStatus(true);
+    setWarning("Kick conectada ao Fenix: " + (fenixSession.user.kickUsername || "conectada"));
+  } else {
+    showKickConnectGate(true);
+    updateKickStatus(false);
+  }
+};
+
+const fenixOriginalLoginFenix = loginFenix;
+loginFenix = async function () {
+  await fenixOriginalLoginFenix();
+
+  if (fenixSession?.sessionId) {
+    await refreshFenixMe();
+
+    if (!isFenixKickConnected()) {
+      showKickConnectGate(true);
+    }
+  }
+};
+
+checkKickLoggedFromView1 = async function () {
+  await refreshFenixMe();
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(async () => {
+    if (fenixSession?.sessionId) {
+      await refreshFenixMe();
+
+      if (!isFenixKickConnected()) {
+        showKickConnectGate(true);
+      }
+    }
+  }, 1200);
+});
+// FIM_FENIX_KICK_CONNECT_GATE_FINAL
 
 
 

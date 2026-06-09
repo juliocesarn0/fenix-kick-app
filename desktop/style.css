@@ -762,3 +762,125 @@ webview {
   font-size: 12px;
   font-weight: 900;
 }
+
+/* FENIX_REMOVE_MENU_BUTTON */
+.menu-btn {
+  display: none !important;
+}
+/* FIM_FENIX_REMOVE_MENU_BUTTON */
+
+
+/* FENIX_KICK_CONNECT_GATE_STYLE */
+.kick-connect-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.86);
+  backdrop-filter: blur(5px);
+}
+
+.kick-connect-gate.show {
+  display: flex;
+}
+
+.kick-connect-card {
+  width: 460px;
+  max-width: calc(100vw - 30px);
+  border: 1px solid rgba(255, 176, 46, 0.65);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top, rgba(0, 255, 102, 0.14), transparent 32%),
+    #0b0c12;
+  padding: 24px;
+  text-align: center;
+  box-shadow: 0 0 55px rgba(0, 0, 0, 0.95);
+}
+
+.kick-connect-logo {
+  color: #ffb02e;
+  font-weight: 900;
+  letter-spacing: 2px;
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+
+.kick-connect-card h2 {
+  margin: 0 0 10px;
+  color: #38ff74;
+  font-size: 25px;
+}
+
+.kick-connect-card p {
+  margin: 0 0 18px;
+  color: #dce2f3;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.kick-connect-steps {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.kick-connect-steps div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: #151721;
+  padding: 10px;
+}
+
+.kick-connect-steps b {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #00ff66;
+  color: #071108;
+  font-size: 13px;
+}
+
+.kick-connect-steps span {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+#kickGateConnectBtn,
+#kickGateRefreshBtn {
+  width: 100%;
+  height: 40px;
+  border-radius: 12px;
+  font-weight: 900;
+  margin-top: 8px;
+}
+
+#kickGateConnectBtn {
+  border: 1px solid rgba(0, 255, 102, 0.75);
+  background: rgba(0, 255, 102, 0.15);
+  color: #38ff74;
+}
+
+#kickGateRefreshBtn {
+  border: 1px solid rgba(255, 176, 46, 0.55);
+  background: rgba(255, 176, 46, 0.12);
+  color: #ffb02e;
+}
+
+#kickGateStatusText {
+  display: block;
+  margin-top: 14px;
+  color: #9da7bd;
+  font-size: 11px;
+  line-height: 1.35;
+}
+/* FIM_FENIX_KICK_CONNECT_GATE_STYLE */
+

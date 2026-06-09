@@ -599,6 +599,7 @@ app.post('/api/fenix/auth/register-or-login', (req, res) => {
 app.post('/api/fenix/app/heartbeat', (req, res) => {
   const sessionId = String(req.body?.sessionId || '').trim();
   const kickLoggedIn = Boolean(req.body?.kickLoggedIn);
+  const tabsKickLoggedIn = Boolean(req.body?.tabsKickLoggedIn);
 
   const data = readFenixData();
   const now = new Date().toISOString();
@@ -841,6 +842,7 @@ app.post('/api/fenix/app/complete-cycle', (req, res) => {
   const sessionId = String(req.body?.sessionId || '').trim();
   const cycleKey = String(req.body?.cycleKey || '').trim();
   const kickLoggedIn = Boolean(req.body?.kickLoggedIn);
+  const tabsKickLoggedIn = Boolean(req.body?.tabsKickLoggedIn);
 
   if (!sessionId || !cycleKey) {
     return res.status(400).json({ ok: false, message: 'sessionId e cycleKey sao obrigatorios.' });
@@ -1198,6 +1200,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
