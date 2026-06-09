@@ -884,3 +884,101 @@ webview {
 }
 /* FIM_FENIX_KICK_CONNECT_GATE_STYLE */
 
+
+.admin-users-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.admin-table-card {
+  border: 1px solid rgba(0, 255, 111, 0.35);
+  background: rgba(8, 12, 22, 0.92);
+  border-radius: 12px;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.admin-table-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: #00ff6a;
+  font-weight: 900;
+  font-size: 15px;
+}
+
+.admin-table-title small {
+  color: #f5b22a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.admin-users-table th {
+  text-align: left;
+  color: #00ff6a;
+  padding: 9px 8px;
+  border-bottom: 1px solid rgba(0, 255, 111, 0.25);
+  background: rgba(0, 255, 111, 0.06);
+}
+
+.admin-users-table td {
+  color: #ffffff;
+  padding: 9px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-users-table tr:hover td {
+  background: rgba(245, 178, 42, 0.08);
+}
+
+.admin-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.admin-pill.green {
+  color: #00ff6a;
+  background: rgba(0, 255, 111, 0.12);
+  border: 1px solid rgba(0, 255, 111, 0.45);
+}
+
+.admin-pill.red {
+  color: #ff4d4d;
+  background: rgba(255, 77, 77, 0.12);
+  border: 1px solid rgba(255, 77, 77, 0.45);
+}
+
+.admin-empty,
+.admin-empty-cell {
+  color: #f5b22a;
+  font-weight: 800;
+  padding: 12px;
+}
+
+
+/* FENIX_HIDE_ADMIN_SECRET_FINAL */
+#adminSecret,
+#adminPassword,
+#adminPass,
+#adminSecretInput,
+#fenixAdminSecret,
+input[type="password"] {
+  display: none !important;
+}
+

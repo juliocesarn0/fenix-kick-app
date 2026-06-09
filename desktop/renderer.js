@@ -714,31 +714,208 @@ function renderAdminUsers(users) {
   }).join("");
 }
 
-async function loadAdminUsers() {
-  const secretInput = $("adminSecretInput");
-  fenixAdminSecret = secretInput?.value?.trim() || fenixAdminSecret || "";
 
-  if (!fenixAdminSecret) {
-    throw new Error("Digite a senha admin antes de carregar usuarios.");
+
+function getAdminSecretValue() {
+  const direct =
+    $("adminSecret") ||
+    $("adminPassword") ||
+    $("adminPass") ||
+    $("adminSecretInput") ||
+    $("fenixAdminSecret") ||
+    document.querySelector('input[type="password"]');
+
+  if (direct && String(direct.value || "").trim()) {
+    return String(direct.value || "").trim();
   }
 
-  const res = await fetch(CONFIG.adminApi + "/api/fenix/admin/online-users", {
-    method: "GET",
-    headers: {
-      "x-fenix-admin": "GokuuMods",
-      "x-fenix-admin-secret": fenixAdminSecret
-    }
+  const labels = Array.from(document.querySelectorAll("label, div, span, strong, p"));
+  const senhaLabel = labels.find((el) => {
+    const text = String(el.innerText || el.textContent || "").toLowerCase();
+    return text.includes("senha admin");
   });
 
-  const data = await res.json().catch(() => ({}));
+  if (senhaLabel) {
+    const parent = senhaLabel.parentElement;
+    const input =
+      parent?.querySelector("input") ||
+      senhaLabel.nextElementSibling?.querySelector?.("input") ||
+      senhaLabel.nextElementSibling;
 
-  if (!res.ok || data.ok === false) {
-    throw new Error(data.message || data.error || "Erro ao carregar usuarios.");
+    if (input && String(input.value || "").trim()) {
+      return String(input.value || "").trim();
+    }
   }
 
-  renderAdminUsers(data.users || []);
-  $("adminMsg").textContent = "Usuarios carregados.";
+  const inputs = Array.from(document.querySelectorAll("input"));
+  const possible = inputs.find((input) => {
+    const type = String(input.type || "").toLowerCase();
+    const placeholder = String(input.placeholder || "").toLowerCase();
+    const id = String(input.id || "").toLowerCase();
+    const name = String(input.name || "").toLowerCase();
+    const value = String(input.value || "").trim();
+
+    if (!value) return false;
+
+    return (
+      type === "password" ||
+      placeholder.includes("senha") ||
+      id.includes("secret") ||
+      id.includes("senha") ||
+      name.includes("secret") ||
+      name.includes("senha")
+    );
+  });
+
+  return possible ? String(possible.value || "").trim() : "";
 }
+
+
+async function loadAdminUsers() {
+  const adminUsersList = $("adminUsersList");
+  if (!adminUsersList) return;
+
+  adminUsersList.innerHTML = '<div class="admin-empty">Carregando usuarios...</div>';
+
+  try {
+    const adminApiUrl = typeof API_URL !== "undefined" ? API_URL : "https://fenix-kick-app-production.up.railway.app";
+
+    const response = await fetch(adminApiUrl + "/api/fenix/admin/online-users", {
+      method: "GET",
+      headers: {
+        "x-fenix-admin": "GokuuMods"
+      }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.ok) {
+      adminUsersList.innerHTML = '<div class="admin-empty">' + (data.message || "Erro ao carregar usuarios.") + '</div>';
+      return;
+    }
+
+    const users = Array.isArray(data.users) ? data.users : [];
+
+    if (!users.length) {
+      adminUsersList.innerHTML = '<div class="admin-empty">Nenhum usuario encontrado ainda.</div>';
+      return;
+    }
+
+    const now = Date.now();
+
+    const normalized = users.map((user) => {
+      const points = Number(user.points || user.totalPoints || 0);
+      const weeklyPoints = Number(user.weeklyPoints || user.weekPoints || user.pointsWeek || 0);
+      const weeklyMinutes = Number(user.weeklyMinutes || user.minutesWeek || 0);
+      const totalMinutes = Number(user.totalMinutes || user.minutes || 0);
+
+      const lastCycleRaw =
+        user.lastCycleAt ||
+        user.lastFarmAt ||
+        user.lastSeenAt ||
+        user.updatedAt ||
+        user.createdAt ||
+        null;
+
+      const lastCycleTime = lastCycleRaw ? new Date(lastCycleRaw).getTime() : 0;
+      const diffMinutes = lastCycleTime ? Math.floor((now - lastCycleTime) / 60000) : 999999;
+
+      const farmActive =
+        Boolean(user.farmActive) ||
+        Boolean(user.online) ||
+        diffMinutes <= 15;
+
+      return {
+        username: user.username || user.userName || user.name || "Usuario",
+        kickName: user.kickUsername || user.kickName || user.kick || "-",
+        points,
+        weeklyPoints,
+        weeklyMinutes,
+        totalMinutes,
+        farmActive,
+        diffMinutes,
+        lastCycleRaw
+      };
+    });
+
+    const activeUsers = normalized
+      .filter((user) => user.farmActive)
+      .sort((a, b) => b.weeklyPoints - a.weeklyPoints || b.points - a.points);
+
+    const ranking = normalized
+      .slice()
+      .sort((a, b) => b.weeklyPoints - a.weeklyPoints || b.points - a.points);
+
+    const renderLastCycle = (user) => {
+      if (!user.lastCycleRaw) return "-";
+      if (user.diffMinutes <= 0) return "agora";
+      if (user.diffMinutes === 1) return "1 min atras";
+      if (user.diffMinutes < 60) return user.diffMinutes + " min atras";
+      return new Date(user.lastCycleRaw).toLocaleString("pt-BR");
+    };
+
+    const activeRows = activeUsers.length
+      ? activeUsers.map((user, index) => {
+          return [
+            "<tr>",
+            "<td>" + (index + 1) + "</td>",
+            "<td><b>" + user.username + "</b></td>",
+            "<td>" + user.kickName + "</td>",
+            '<td><span class="admin-pill green">Farm ativo</span></td>',
+            "<td>" + user.weeklyPoints + "</td>",
+            "<td>" + user.points + "</td>",
+            "<td>" + user.weeklyMinutes + " min</td>",
+            "<td>" + renderLastCycle(user) + "</td>",
+            "</tr>"
+          ].join("");
+        }).join("")
+      : '<tr><td colspan="8" class="admin-empty-cell">Ninguem farmando agora.</td></tr>';
+
+    const rankingRows = ranking.map((user, index) => {
+      const approved = user.weeklyPoints >= 210;
+      const percent = Math.min(100, Math.floor((user.weeklyPoints / 300) * 100));
+
+      return [
+        "<tr>",
+        "<td>" + (index + 1) + "</td>",
+        "<td><b>" + user.username + "</b></td>",
+        "<td>" + user.kickName + "</td>",
+        "<td>" + user.weeklyPoints + " pontos</td>",
+        "<td>" + user.points + " pontos</td>",
+        "<td>" + percent + "%</td>",
+        '<td><span class="admin-pill ' + (approved ? "green" : "red") + '">' + (approved ? "Aprovado 70%" : "Pendente") + "</span></td>",
+        "</tr>"
+      ].join("");
+    }).join("");
+
+    adminUsersList.innerHTML = [
+      '<div class="admin-users-grid">',
+      '<div class="admin-table-card">',
+      '<div class="admin-table-title"><span>Farm ativo agora</span><small>' + activeUsers.length + " online/farmando</small></div>",
+      '<table class="admin-users-table">',
+      '<thead><tr><th>#</th><th>Usuario</th><th>Kick</th><th>Status</th><th>Semana</th><th>Total</th><th>Min semana</th><th>Ultimo ciclo</th></tr></thead>',
+      "<tbody>" + activeRows + "</tbody>",
+      "</table>",
+      "</div>",
+      '<div class="admin-table-card">',
+      '<div class="admin-table-title"><span>Ranking de pontos da semana</span><small>Meta 300 pontos - minimo 70% = 210</small></div>',
+      '<table class="admin-users-table">',
+      '<thead><tr><th>#</th><th>Usuario</th><th>Kick</th><th>Semana</th><th>Total</th><th>% Meta</th><th>Status</th></tr></thead>',
+      "<tbody>" + rankingRows + "</tbody>",
+      "</table>",
+      "</div>",
+      "</div>"
+    ].join("");
+
+    if (typeof setAdminMessage === "function") {
+      setAdminMessage("Usuarios carregados.");
+    }
+  } catch (error) {
+    console.error("Erro ao carregar usuarios admin:", error);
+    adminUsersList.innerHTML = '<div class="admin-empty">Erro ao carregar usuarios: ' + (error.message || error) + '</div>';
+  }
+}
+
 function createAdminPanel() {
   if (!fenixSession?.user?.isAdmin && String(fenixSession?.user?.username || "").toLowerCase() !== "gokuumods") {
     alert("Painel Admin liberado somente para GokuuMods.");
@@ -1269,6 +1446,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }, 1200);
 });
 // FIM_FENIX_KICK_CONNECT_GATE_FINAL
+
+
+
+
 
 
 
