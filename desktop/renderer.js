@@ -1859,3 +1859,123 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }, 800);
 });
+
+
+
+
+/* FENIX_RESET_ACCESS_EXIT_BUTTON_FINAL */
+async function fenixResetAccessAndExitFinal() {
+  const ok = confirm("Resetar acesso completo e fechar o app? Depois voce tera que entrar no Fenix e vincular a Kick novamente.");
+  if (!ok) return;
+
+  const username =
+    fenixSession?.user?.username ||
+    document.querySelector(".profile-name")?.innerText ||
+    document.querySelector("#userName")?.innerText ||
+    "";
+
+  const sessionId = fenixSession?.sessionId || "";
+  const keepDeviceId = localStorage.getItem("fenixDeviceId");
+
+  try {
+    await fetch(CONFIG.adminApi + "/api/fenix/auth/reset-access", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        sessionId,
+        username
+      })
+    });
+  } catch (error) {
+    console.error("Erro ao resetar backend:", error);
+  }
+
+  try {
+    if (window.fenixDesktop && typeof window.fenixDesktop.clearAllAccess === "function") {
+      await window.fenixDesktop.clearAllAccess();
+    }
+  } catch (error) {
+    console.error("Erro ao limpar sessoes Electron:", error);
+  }
+
+  try {
+    for (const number of [1, 2, 3]) {
+      const view = document.getElementById("view" + number);
+
+      if (view) {
+        try {
+          await view.executeJavaScript("localStorage.clear(); sessionStorage.clear(); document.cookie.split(';').forEach(c => document.cookie = c.replace(/^ +/, '').replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/'));", true);
+        } catch {}
+
+        view.src = "about:blank";
+        view.removeAttribute("src");
+      }
+    }
+  } catch {}
+
+  try {
+    localStorage.clear();
+    sessionStorage.clear();
+
+    if (keepDeviceId) {
+      localStorage.setItem("fenixDeviceId", keepDeviceId);
+    }
+  } catch {}
+
+  try {
+    if (window.fenixDesktop && typeof window.fenixDesktop.closeApp === "function") {
+      await window.fenixDesktop.closeApp();
+      return;
+    }
+  } catch {}
+
+  window.close();
+}
+
+function fenixEnsureResetExitButtonFinal() {
+  // remove qualquer botao duplicado fora do card
+  const allResetButtons = Array.from(document.querySelectorAll("#fenixResetAccessExitBtn"));
+  allResetButtons.slice(1).forEach((btn) => btn.remove());
+
+  const popupCard =
+    document.querySelector(".kick-connect-card") ||
+    document.querySelector(".fenix-tabs-login-box") ||
+    Array.from(document.querySelectorAll("div")).find((el) => {
+      const text = String(el.innerText || el.textContent || "").toLowerCase();
+      const rect = el.getBoundingClientRect();
+
+      return (
+        rect.width > 250 &&
+        rect.width < 700 &&
+        rect.height > 200 &&
+        text.includes("conectar kick obrigatorio")
+      );
+    });
+
+  if (!popupCard) return;
+
+  // remove botao antigo se estiver fora do card
+  Array.from(document.querySelectorAll("#fenixResetAccessExitBtn")).forEach((btn) => {
+    if (!popupCard.contains(btn)) {
+      btn.remove();
+    }
+  });
+
+  if (popupCard.querySelector("#fenixResetAccessExitBtn")) return;
+
+  const btn = document.createElement("button");
+  btn.id = "fenixResetAccessExitBtn";
+  btn.textContent = "Resetar acesso e sair";
+  btn.className = "fenix-reset-access-exit-btn";
+  btn.onclick = fenixResetAccessAndExitFinal;
+
+  popupCard.appendChild(btn);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(fenixEnsureResetExitButtonFinal, 800);
+  setTimeout(fenixEnsureResetExitButtonFinal, 2000);
+  setInterval(fenixEnsureResetExitButtonFinal, 3000);
+});
