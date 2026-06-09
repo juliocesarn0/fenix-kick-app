@@ -480,29 +480,17 @@ function publicFenixUser(user) {
 }
 
 function requireFenixAdmin(req, res, next) {
-  const adminUsername =
+  const adminUsername = String(
     req.headers['x-fenix-admin'] ||
     req.body?.adminUsername ||
     req.query?.adminUsername ||
-    '';
+    ''
+  ).trim();
 
-  const adminSecret =
-    req.headers['x-fenix-admin-secret'] ||
-    req.body?.adminSecret ||
-    req.query?.adminSecret ||
-    '';
-
-  if (String(adminUsername).trim().toLowerCase() !== FENIX_ADMIN_USER.toLowerCase()) {
+  if (adminUsername.toLowerCase() !== FENIX_ADMIN_USER.toLowerCase()) {
     return res.status(403).json({
       ok: false,
-      message: 'Painel Admin liberado somente para GokuuMods.'
-    });
-  }
-
-  if (!FENIX_ADMIN_SECRET || String(adminSecret || "").trim() !== String(FENIX_ADMIN_SECRET || "").trim()) {
-    return res.status(403).json({
-      ok: false,
-      message: 'Senha admin invalida.'
+      message: 'Acesso admin negado.'
     });
   }
 
@@ -1200,6 +1188,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
