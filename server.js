@@ -291,8 +291,9 @@ app.get('/api/livestreams/stats', requireKickConfig, async (req, res) => {
 const FENIX_ADMIN_USER = 'GokuuMods';
 const FENIX_ADMIN_SECRET = process.env.FENIX_ADMIN_SECRET || '';
 const FENIX_MIN_CYCLE_INTERVAL_MS = Number(process.env.FENIX_MIN_CYCLE_INTERVAL_MS || 1000 * 60 * 9);
-const FENIX_DATA_DIR = path.join(__dirname, 'backend', 'data');
+const FENIX_DATA_DIR = process.env.FENIX_DATA_DIR || (fs.existsSync('/data') ? '/data' : path.join(__dirname, 'backend', 'data'));
 const FENIX_DATA_FILE = path.join(FENIX_DATA_DIR, 'fenix-data.json');
+console.log('Fenix data file:', FENIX_DATA_FILE);
 
 fs.mkdirSync(FENIX_DATA_DIR, { recursive: true });
 
