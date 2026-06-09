@@ -360,21 +360,62 @@ async function applyModoLeve() {
 async function checkKickLoggedFromView1() {
   const view = $("view1");
 
-  if (!view || !view.getAttribute("src")) return;
+  if (!view || !view.getAttribute("src")) {
+    kickPopupAlreadyShown = false;
+    hideKickPopup();
+    updateKickStatus(false);
+    return;
+  }
 
   try {
     const logged = await view.executeJavaScript(`
-      (() => {
-        const text = document.body ? document.body.innerText.toLowerCase() : "";
-        const hasLoginText = text.includes("log in") || text.includes("login") || text.includes("entrar");
-        const hasProfile =
-          document.querySelector('a[href*="/settings"]') ||
-          document.querySelector('a[href*="/profile"]') ||
-          document.querySelector('button[aria-label*="profile" i]') ||
-          document.querySelector('button[aria-label*="perfil" i]') ||
-          document.querySelector('img[src*="user"]') ||
-          document.querySelector('img[alt*="avatar" i]');
-        return Boolean(hasProfile || !hasLoginText);
+      (async () => {
+        async function checkEndpoint(url) {
+          try {
+            const response = await fetch(url, {
+              credentials: "include",
+              cache: "no-store"
+            });
+
+            if (!response.ok) {
+              return false;
+            }
+
+            const data = await response.json().catch(() => null);
+
+            if (!data || typeof data !== "object") {
+              return false;
+            }
+
+            const user = data.user || data.data || data;
+
+            return Boolean(
+              user &&
+              (
+                user.id ||
+                user.username ||
+                user.slug ||
+                user.email
+              )
+            );
+          } catch (error) {
+            return false;
+          }
+        }
+
+        const loggedV2 = await checkEndpoint("/api/v2/user");
+
+        if (loggedV2) {
+          return true;
+        }
+
+        const loggedV1 = await checkEndpoint("/api/v1/user");
+
+        if (loggedV1) {
+          return true;
+        }
+
+        return false;
       })();
     `, true);
 
@@ -382,8 +423,18 @@ async function checkKickLoggedFromView1() {
       updateKickStatus(true);
       showKickPopup();
       setWarning("Kick logada detectada. Clique em Atualizar Telas para aplicar nas 3 telas.");
+    } else {
+      kickPopupAlreadyShown = false;
+      hideKickPopup();
+      updateKickStatus(false);
+      setWarning("LOGIN KICK OBRIGATORIO: entre na Kick dentro da Tela 1 e depois clique em Atualizar Telas.");
     }
-  } catch {}
+  } catch {
+    kickPopupAlreadyShown = false;
+    hideKickPopup();
+    updateKickStatus(false);
+    setWarning("LOGIN KICK OBRIGATORIO: entre na Kick dentro da Tela 1 e depois clique em Atualizar Telas.");
+  }
 }
 
 async function completeCycle() {
@@ -702,7 +753,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   setInterval(loadSchedule, CONFIG.refreshSeconds * 1000);
   setInterval(muteAllWebviews, 5000);
+
+  // FENIX_RECHECK_KICK_LOGIN_TIMER
+  setInterval(checkKickLoggedFromView1, 15000);
 });
+
+
+
 
 
 

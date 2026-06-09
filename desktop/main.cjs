@@ -91,3 +91,41 @@ ipcMain.handle("fenix:focus-login", async () => {
 });
 
 
+
+ipcMain.handle("fenix:is-kick-logged-in", async () => {
+  try {
+    const cookies = await session.fromPartition("persist:fenix-kick-session").cookies.get({
+      url: "https://kick.com"
+    });
+
+    const loggedIn = cookies.some((cookie) => {
+      const name = String(cookie.name || "").toLowerCase();
+
+      const looksAuth =
+        name.includes("auth") ||
+        name.includes("token") ||
+        name.includes("remember") ||
+        name.includes("jwt") ||
+        name.includes("user");
+
+      const looksPublic =
+        name.includes("xsrf") ||
+        name.includes("csrf") ||
+        name.includes("guest") ||
+        name.includes("anonymous") ||
+        name.includes("visitor") ||
+        name.includes("locale") ||
+        name.includes("theme") ||
+        name.includes("_ga") ||
+        name.includes("_gid") ||
+        name.includes("cf_") ||
+        name.includes("__cf");
+
+      return looksAuth && !looksPublic;
+    });
+
+    return { ok: true, loggedIn };
+  } catch (error) {
+    return { ok: false, loggedIn: false };
+  }
+});
