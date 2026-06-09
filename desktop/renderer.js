@@ -1366,7 +1366,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   updateCycleTimer();
   cycleTimer = setInterval(updateCycleTimer, 1000);
 
-  setInterval(loadSchedule, CONFIG.refreshSeconds * 1000);
+  setInterval(loadSchedule, CONFIG.cycleSeconds * 1000);
 
   // FENIX_BACKEND_KICK_STATUS_TIMER
   setInterval(refreshFenixMe, 15000);
@@ -1658,25 +1658,6 @@ function fenixOpenKickHomeWhenNoLive() {
   } catch (error) {
     console.error("Erro ao abrir kick.com sem live:", error);
   }
-}
-
-const fenixOriginalRefreshScreensNoLive =
-  typeof refreshScreens === "function" ? refreshScreens : null;
-
-if (fenixOriginalRefreshScreensNoLive) {
-  refreshScreens = async function(...args) {
-    const result = await fenixOriginalRefreshScreensNoLive.apply(this, args);
-
-    setTimeout(() => {
-      fenixOpenKickHomeWhenNoLive();
-
-      if (typeof checkKickTabsLoggedIn === "function") {
-        checkKickTabsLoggedIn();
-      }
-    }, 1000);
-
-    return result;
-  };
 }
 
 document.addEventListener("DOMContentLoaded", () => {
