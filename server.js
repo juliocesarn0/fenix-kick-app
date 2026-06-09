@@ -457,7 +457,7 @@ function requireFenixAdmin(req, res, next) {
     });
   }
 
-  if (!FENIX_ADMIN_SECRET || String(adminSecret) !== String(FENIX_ADMIN_SECRET)) {
+  if (!FENIX_ADMIN_SECRET || String(adminSecret || "").trim() !== String(FENIX_ADMIN_SECRET || "").trim()) {
     return res.status(403).json({
       ok: false,
       message: 'Senha admin invalida.'
@@ -978,6 +978,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 

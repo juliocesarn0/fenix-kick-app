@@ -447,6 +447,11 @@ function clearLogin() {
 }
 
 function createAdminPanel() {
+  if (!fenixSession?.user?.isAdmin && String(fenixSession?.user?.username || "").toLowerCase() !== "gokuumods") {
+    alert("Painel Admin liberado somente para GokuuMods.");
+    return;
+  }
+
   let modal = $("adminModal");
 
   if (modal) {
@@ -476,6 +481,7 @@ function createAdminPanel() {
       <div class="fenix-admin-now">
         <label>Data<input id="adminDate" type="date" /></label>
         <label>Hora<input id="adminHour" type="time" step="3600" /></label>
+        <label>Senha Admin<input id="adminSecretInput" type="password" placeholder="senha da Railway" /></label>
         <label>Tela 1<input id="adminNow1" placeholder="gokuumods" /></label>
         <label>Tela 2<input id="adminNow2" placeholder="vazio = manutencao" /></label>
         <label>Tela 3<input id="adminNow3" placeholder="vazio = manutencao" /></label>
@@ -557,8 +563,15 @@ function createAdminPanel() {
     const s2 = normalizeChannel(row.querySelector('input[data-screen="2"]').value);
     const s3 = normalizeChannel(row.querySelector('input[data-screen="3"]').value);
 
+    fenixAdminSecret = document.getElementById("adminSecretInput")?.value?.trim() || "";
+
+    if (!fenixAdminSecret) {
+      throw new Error("Digite a senha admin antes de salvar.");
+    }
+
     const payload = {
       adminUsername: "GokuuMods",
+      adminSecret: fenixAdminSecret,
       slotDate,
       slotHour: hour,
       screen1Name: s1,
@@ -578,7 +591,8 @@ function createAdminPanel() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-fenix-admin": "GokuuMods"
+        "x-fenix-admin": "GokuuMods",
+        "x-fenix-admin-secret": fenixAdminSecret
       },
       body: JSON.stringify(payload)
     });
@@ -689,6 +703,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   setInterval(loadSchedule, CONFIG.refreshSeconds * 1000);
   setInterval(muteAllWebviews, 5000);
 });
+
+
+
+
 
 
 
