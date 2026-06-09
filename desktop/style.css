@@ -978,7 +978,14 @@ webview {
 #adminPass,
 #adminSecretInput,
 #fenixAdminSecret,
-input[type="password"] {
+#adminPanel input[type="password"],
+.admin-panel input[type="password"],
+#adminSecret,
+#adminPassword,
+#adminPass,
+#adminSecretInput,
+#fenixAdminSecret {
   display: none !important;
 }
+
 
