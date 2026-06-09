@@ -1,6 +1,6 @@
 {
   "name": "fenix-kick-app",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Fenix - painel Kick API pronto para Railway",
   "main": "desktop/main.cjs",
   "type": "module",
@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "dotenv": "^16.4.5",
+    "electron-updater": "^6.8.9",
     "express": "^4.19.2",
     "express-session": "^1.18.0"
   },
@@ -42,7 +43,14 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Fenix Lurk"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "FluxoViewers",
+        "repo": "fenix-kick-app"
+      }
+    ]
   },
   "productName": "Fenix Lurk",
   "author": "GokuuMods"

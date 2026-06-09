@@ -1108,18 +1108,120 @@ app.post('/api/fenix/app/complete-cycle', (req, res) => {
 
 
 // FENIX_ADMIN_ONLINE_USERS_LAST_CYCLE_FINAL
+
+
+// FENIX_APP_FAST_HEARTBEAT_FINAL
+app.post('/api/fenix/app/heartbeat', (req, res) => {
+  const sessionId = String(req.body?.sessionId || '').trim();
+
+  if (!sessionId) {
+    return res.status(400).json({
+      ok: false,
+      message: 'Sessao Fenix nao informada.'
+    });
+  }
+
+  const data = readFenixData();
+
+  data.users = Array.isArray(data.users) ? data.users : [];
+  data.sessions = Array.isArray(data.sessions) ? data.sessions : [];
+  data.farmHeartbeats = Array.isArray(data.farmHeartbeats) ? data.farmHeartbeats : [];
+
+  const session = data.sessions.find((item) => {
+    return item.id === sessionId || item.sessionId === sessionId;
+  });
+
+  if (!session) {
+    return res.status(401).json({
+      ok: false,
+      message: 'Sessao Fenix expirada.'
+    });
+  }
+
+  const user = data.users.find((item) => {
+    return item.id === session.userId ||
+      String(item.username || '').toLowerCase() === String(session.username || '').toLowerCase();
+  });
+
+  if (!user) {
+    return res.status(404).json({
+      ok: false,
+      message: 'Usuario Fenix nao encontrado.'
+    });
+  }
+
+  const now = new Date().toISOString();
+  const kickConnected = Boolean(user.kickConnected || user.kickLoggedIn);
+  const tabsLoggedIn = Boolean(req.body?.tabsLoggedIn);
+  const farmOk = Boolean(kickConnected && tabsLoggedIn);
+
+  const heartbeat = {
+    userId: user.id,
+    username: user.username,
+    kickUsername: user.kickUsername || user.kickName || '',
+    appOnline: true,
+    kickConnected,
+    tabsLoggedIn,
+    farmOk,
+    lastSeenAt: now,
+    updatedAt: now
+  };
+
+  const existing = data.farmHeartbeats.find((item) => {
+    return item.userId === user.id ||
+      String(item.username || '').toLowerCase() === String(user.username || '').toLowerCase();
+  });
+
+  if (existing) {
+    Object.assign(existing, heartbeat);
+  } else {
+    data.farmHeartbeats.push(heartbeat);
+  }
+
+  writeFenixData(data);
+
+  return res.json({
+    ok: true,
+    heartbeat
+  });
+});
+
+
+// FENIX_ADMIN_ONLINE_USERS_FAST_HEARTBEAT_FINAL
 app.get('/api/fenix/admin/online-users', requireFenixAdmin, (req, res) => {
   const data = readFenixData();
 
   data.users = Array.isArray(data.users) ? data.users : [];
   data.cycles = Array.isArray(data.cycles) ? data.cycles : [];
+  data.farmHeartbeats = Array.isArray(data.farmHeartbeats) ? data.farmHeartbeats : [];
 
   const nowMs = Date.now();
+
+  function getTimeMs(value) {
+    if (!value) return 0;
+    const time = new Date(value).getTime();
+    return Number.isFinite(time) ? time : 0;
+  }
+
+  function minutesAgo(value) {
+    const time = getTimeMs(value);
+    if (!time) return null;
+    return Math.max(0, Math.floor((nowMs - time) / 60000));
+  }
+
+  function findHeartbeat(user) {
+    const username = String(user.username || '').toLowerCase();
+
+    return data.farmHeartbeats.find((item) => {
+      return item.userId === user.id ||
+        String(item.username || '').toLowerCase() === username;
+    }) || null;
+  }
 
   function findLastCycleForUser(user) {
     const username = String(user.username || '').toLowerCase();
 
-    const userCycles = data.cycles.filter((cycle) => {
+    const cycles = data.cycles.filter((cycle) => {
       const cycleUser =
         cycle.username ||
         cycle.userName ||
@@ -1128,36 +1230,25 @@ app.get('/api/fenix/admin/online-users', requireFenixAdmin, (req, res) => {
         cycle.name ||
         '';
 
-      return (
-        cycle.userId === user.id ||
-        String(cycleUser || '').toLowerCase() === username
-      );
+      return cycle.userId === user.id ||
+        String(cycleUser || '').toLowerCase() === username;
     });
 
-    if (!userCycles.length) return null;
+    if (!cycles.length) return null;
 
-    return userCycles
-      .slice()
-      .sort((a, b) => {
-        const aTime = new Date(a.completedAt || a.createdAt || a.updatedAt || a.finishedAt || 0).getTime();
-        const bTime = new Date(b.completedAt || b.createdAt || b.updatedAt || b.finishedAt || 0).getTime();
-
-        return bTime - aTime;
-      })[0];
-  }
-
-  function minutesAgo(dateValue) {
-    if (!dateValue) return null;
-
-    const time = new Date(dateValue).getTime();
-
-    if (!time || Number.isNaN(time)) return null;
-
-    return Math.max(0, Math.floor((nowMs - time) / 60000));
+    return cycles.slice().sort((a, b) => {
+      const at = getTimeMs(a.completedAt || a.createdAt || a.updatedAt || a.finishedAt);
+      const bt = getTimeMs(b.completedAt || b.createdAt || b.updatedAt || b.finishedAt);
+      return bt - at;
+    })[0];
   }
 
   const users = data.users.map((user) => {
+    const heartbeat = findHeartbeat(user);
     const lastCycle = findLastCycleForUser(user);
+
+    const lastSeenAt = heartbeat?.lastSeenAt || heartbeat?.updatedAt || null;
+    const lastSeenMinutes = minutesAgo(lastSeenAt);
 
     const lastCycleAt =
       lastCycle?.completedAt ||
@@ -1170,44 +1261,62 @@ app.get('/api/fenix/admin/online-users', requireFenixAdmin, (req, res) => {
 
     const lastCycleMinutes = minutesAgo(lastCycleAt);
 
-    const farmActive = lastCycleMinutes !== null && lastCycleMinutes <= 15;
-    const farmWarning = lastCycleMinutes !== null && lastCycleMinutes > 15 && lastCycleMinutes <= 30;
-    const farmOffline = lastCycleMinutes === null || lastCycleMinutes > 30;
+    const hasFastSignal = lastSeenMinutes !== null;
 
-    const kickConnected = Boolean(user.kickConnected || user.kickLoggedIn);
-    const farmOk = Boolean(kickConnected && farmActive);
+    const appOnline = hasFastSignal && lastSeenMinutes <= 2;
+    const appWarning = hasFastSignal && lastSeenMinutes > 2 && lastSeenMinutes <= 5;
+
+    const cycleActive = lastCycleMinutes !== null && lastCycleMinutes <= 15;
+    const cycleWarning = lastCycleMinutes !== null && lastCycleMinutes > 15 && lastCycleMinutes <= 30;
+
+    const kickConnected = Boolean(user.kickConnected || user.kickLoggedIn || heartbeat?.kickConnected);
+    const tabsLoggedIn = Boolean(heartbeat?.tabsLoggedIn);
+
+    const farmOk = Boolean(kickConnected && ((hasFastSignal && appOnline && tabsLoggedIn) || (!hasFastSignal && cycleActive)));
 
     let farmStatus = 'Offline';
 
     if (farmOk) {
       farmStatus = 'Farm OK';
-    } else if (farmActive && !kickConnected) {
+    } else if (appOnline && !tabsLoggedIn) {
+      farmStatus = 'Abas nao logadas';
+    } else if (appOnline && !kickConnected) {
       farmStatus = 'Sem Kick';
-    } else if (farmWarning) {
+    } else if (appWarning || cycleWarning) {
       farmStatus = 'Atenção';
+    } else if (!hasFastSignal && cycleActive) {
+      farmStatus = kickConnected ? 'Farm OK' : 'Sem Kick';
     }
+
+    const lastTextBase = hasFastSignal ? lastSeenMinutes : lastCycleMinutes;
+    const lastText = lastTextBase === null
+      ? 'Nunca'
+      : lastTextBase <= 0
+        ? 'Agora'
+        : lastTextBase + ' min atrás';
 
     return {
       id: user.id,
       username: user.username,
-      kickUsername: user.kickUsername || user.kickName || '',
+      kickUsername: user.kickUsername || user.kickName || heartbeat?.kickUsername || '',
       points: Number(user.points || 0),
       weeklyPoints: Number(user.weeklyPoints || 0),
       totalMinutes: Number(user.totalMinutes || 0),
       weeklyMinutes: Number(user.weeklyMinutes || 0),
       kickConnected,
       kickLoggedIn: kickConnected,
-      online: farmActive,
-      farmActive,
+      tabsLoggedIn,
+      online: appOnline || (!hasFastSignal && cycleActive),
+      appOnline,
+      appWarning,
+      farmActive: appOnline || (!hasFastSignal && cycleActive),
       farmOk,
       farmStatus,
+      lastSeenAt,
+      lastSeenMinutes,
       lastCycleAt,
       lastCycleMinutes,
-      lastCycleText: lastCycleMinutes === null
-        ? 'Nunca'
-        : lastCycleMinutes <= 0
-          ? 'Agora'
-          : lastCycleMinutes + ' min atrás'
+      lastCycleText: lastText
     };
   });
 
@@ -1430,7 +1539,7 @@ app.post('/api/fenix/admin/notice', requireFenixAdmin, (req, res) => {
 // FENIX_WEB_ADMIN_PANEL_FINAL
 app.get('/admin', (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.end("<!doctype html>\n<html lang=\"pt-BR\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />\n  <title>Fenix Lurk Admin</title>\n  <style>\n    *{box-sizing:border-box}\n    body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#05070d;color:#fff}\n    header{padding:18px 24px;border-bottom:1px solid rgba(0,255,106,.25);background:#07110c;display:flex;justify-content:space-between;align-items:center;gap:14px}\n    h1{margin:0;color:#00ff6a;font-size:22px}\n    h2{margin:0 0 14px;color:#f5b22a}\n    main{padding:20px;display:grid;gap:16px}\n    .card{border:1px solid rgba(0,255,106,.25);background:rgba(10,15,25,.96);border-radius:16px;padding:16px}\n    .login{display:grid;grid-template-columns:1fr 1fr auto auto;gap:10px;align-items:end}\n    label{display:grid;gap:6px;color:#b8c6d8;font-size:12px;font-weight:900;text-transform:uppercase}\n    input,textarea{width:100%;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:#080b12;color:#fff;padding:11px 12px;font-weight:800}\n    button{border:1px solid rgba(0,255,106,.65);border-radius:10px;background:rgba(0,255,106,.14);color:#fff;padding:11px 14px;cursor:pointer;font-weight:900}\n    button:hover{background:rgba(0,255,106,.25)}\n    .danger{border-color:rgba(255,70,70,.65);background:rgba(255,70,70,.12)}\n    .gold{border-color:rgba(245,178,42,.7);background:rgba(245,178,42,.13)}\n    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}\n    table{width:100%;border-collapse:collapse;font-size:13px}\n    th,td{padding:10px 8px;border-bottom:1px solid rgba(255,255,255,.08);text-align:left}\n    th{color:#00ff6a;background:rgba(0,255,106,.06)}\n    .pill{padding:4px 8px;border-radius:999px;font-size:11px;font-weight:900;display:inline-block}\n    .ok{color:#00ff6a;border:1px solid rgba(0,255,106,.5);background:rgba(0,255,106,.12)}\n    .bad{color:#ff5252;border:1px solid rgba(255,82,82,.5);background:rgba(255,82,82,.12)}\n    .warn{color:#f5b22a;border:1px solid rgba(245,178,42,.5);background:rgba(245,178,42,.12)}\n    .muted{color:#9ba8ba}\n    .row24{display:grid;grid-template-columns:80px 1fr 1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:center}\n    .row24 b{color:#f5b22a}\n    .msg{color:#f5b22a;font-weight:900;margin-top:10px;min-height:20px}\n    @media(max-width:900px){.login,.grid2,.row24{grid-template-columns:1fr}header{display:block}}\n  </style>\n</head>\n<body>\n  <header>\n    <div>\n      <h1>Fenix Lurk Admin</h1>\n      <div style=\"color:#f5b22a;font-weight:800;font-size:13px\">Painel externo · atualiza sem trocar o app dos usuarios</div>\n    </div>\n    <div id=\"topStatus\" style=\"color:#f5b22a;font-weight:900\">Desconectado</div>\n  </header>\n\n  <main>\n    <section class=\"card\">\n      <div class=\"login\">\n        <label>Usuario Admin<input id=\"adminUser\" value=\"GokuuMods\" /></label>\n        <label>Senha Admin<input id=\"adminSecret\" type=\"password\" placeholder=\"senha da Railway\" /></label>\n        <button onclick=\"saveLogin()\">Entrar / Salvar</button>\n        <button class=\"danger\" onclick=\"logout()\">Sair</button>\n      </div>\n      <div class=\"msg\" id=\"loginMsg\">Digite a senha admin para liberar o painel.</div>\n    </section>\n\n    <section class=\"grid2\">\n      <div class=\"card\">\n        <h2>Farm ativo agora</h2>\n        <button onclick=\"loadUsers()\">Atualizar usuarios</button>\n        <div id=\"activeUsers\"></div>\n      </div>\n      <div class=\"card\">\n        <h2>Ranking de pontos da semana</h2>\n        <button onclick=\"loadUsers()\">Atualizar ranking</button>\n        <div id=\"rankingUsers\"></div>\n      </div>\n    </section>\n\n    <section class=\"card\">\n      <h2>Grade de lives por horario</h2>\n      <div class=\"muted\">Vazio = app abre kick.com. Com canal = app abre a live agendada.</div>\n      <br />\n      <label>Data<input id=\"slotDate\" type=\"date\" /></label>\n      <br />\n      <button onclick=\"loadSchedule()\">Carregar grade</button>\n      <button class=\"gold\" onclick=\"saveAllVisible()\">Salvar grade inteira</button>\n      <div class=\"msg\" id=\"scheduleMsg\"></div>\n      <div id=\"scheduleRows\"></div>\n    </section>\n\n    <section class=\"card\">\n      <h2>Aviso para o app</h2>\n      <textarea id=\"noticeText\" rows=\"3\" placeholder=\"Digite o aviso que aparece para os usuarios...\"></textarea>\n      <br /><br />\n      <button onclick=\"saveNotice()\">Salvar aviso</button>\n      <div class=\"msg\" id=\"noticeMsg\"></div>\n    </section>\n  </main>\n\n<script>\nconst API = location.origin;\nconst hours = Array.from({length:24}, (_,i)=>String(i).padStart(2,\"0\")+\":00\");\n\nfunction $(id){return document.getElementById(id)}\nfunction today(){return new Date().toISOString().slice(0,10)}\nfunction escapeHtml(v){\n  return String(v || \"\").replace(/[&<>\"']/g, function(m){\n    return {\"&\":\"&amp;\",\"<\":\"&lt;\",\">\":\"&gt;\",'\"':\"&quot;\",\"'\":\"&#039;\"}[m];\n  });\n}\nfunction adminHeaders(){\n  return {\n    \"Content-Type\":\"application/json\",\n    \"x-fenix-admin\": $(\"adminUser\").value.trim() || \"GokuuMods\",\n    \"x-fenix-admin-secret\": $(\"adminSecret\").value.trim()\n  };\n}\nfunction buildKickUrl(name){\n  const clean = String(name || \"\").trim().replace(/^https?:\\/\\/kick\\.com\\//i,\"\").replace(/^kick\\.com\\//i,\"\").replace(/^@/,\"\");\n  return clean ? \"https://kick.com/\" + clean : \"\";\n}\nfunction saveLogin(){\n  localStorage.setItem(\"fenixAdminUser\", $(\"adminUser\").value.trim() || \"GokuuMods\");\n  localStorage.setItem(\"fenixAdminSecret\", $(\"adminSecret\").value.trim());\n  $(\"topStatus\").textContent = \"Admin conectado\";\n  $(\"loginMsg\").textContent = \"Login salvo neste navegador.\";\n  loadUsers();\n  loadSchedule();\n}\nfunction logout(){\n  localStorage.removeItem(\"fenixAdminSecret\");\n  $(\"adminSecret\").value = \"\";\n  $(\"topStatus\").textContent = \"Desconectado\";\n  $(\"loginMsg\").textContent = \"Senha removida.\";\n}\nasync function apiGet(url){\n  const res = await fetch(API + url, { headers: adminHeaders(), cache:\"no-store\" });\n  const data = await res.json();\n  if(!res.ok || data.ok === false) throw new Error(data.message || \"Erro API\");\n  return data;\n}\nasync function apiPost(url, body){\n  const res = await fetch(API + url, {method:\"POST\",headers:adminHeaders(),body:JSON.stringify(body)});\n  const data = await res.json();\n  if(!res.ok || data.ok === false) throw new Error(data.message || \"Erro API\");\n  return data;\n}\nfunction farmPill(user){\n  if (user.farmOk) return '<span class=\"pill ok\">Farm OK</span>';\n  if (user.farmStatus === \"Atenção\" || user.farmStatus === \"Atencao\") return '<span class=\"pill warn\">Atenção</span>';\n  if (user.online || user.farmActive) return '<span class=\"pill warn\">Incompleto</span>';\n  return '<span class=\"pill bad\">Offline</span>';\n}\nfunction kickPill(user){\n  return (user.kickConnected || user.kickLoggedIn)\n    ? '<span class=\"pill ok\">Sim</span>'\n    : '<span class=\"pill bad\">Nao</span>';\n}\nfunction userTable(users, mode){\n  if(!users.length) return '<p class=\"muted\">Nenhum usuario encontrado.</p>';\n\n  return '<table><thead><tr>' +\n    '<th>#</th><th>Usuario</th><th>Kick</th><th>Farm</th><th>Kick vinculada</th><th>Ultimo ciclo</th><th>Semana</th><th>Total</th><th>Status</th>' +\n    '</tr></thead><tbody>' +\n    users.map(function(u,i){\n      const weekly = Number(u.weeklyPoints || 0);\n      const total = Number(u.points || 0);\n      const approved = weekly >= 210;\n      const rankingStatus = approved ? '<span class=\"pill ok\">Aprovado 70%</span>' : '<span class=\"pill bad\">Pendente</span>';\n      const status = mode === \"ranking\" ? rankingStatus : farmPill(u);\n\n      return '<tr>' +\n        '<td>'+(i+1)+'</td>' +\n        '<td><b>'+escapeHtml(u.username || \"-\")+'</b></td>' +\n        '<td>'+escapeHtml(u.kickUsername || u.kickName || \"-\")+'</td>' +\n        '<td>'+farmPill(u)+'</td>' +\n        '<td>'+kickPill(u)+'</td>' +\n        '<td>'+escapeHtml(u.lastCycleText || \"Nunca\")+'</td>' +\n        '<td>'+weekly+' pts</td>' +\n        '<td>'+total+' pts</td>' +\n        '<td>'+status+'</td>' +\n      '</tr>';\n    }).join(\"\") + '</tbody></table>';\n}\nasync function loadUsers(){\n  try{\n    const data = await apiGet(\"/api/fenix/admin/online-users\");\n    const users = Array.isArray(data.users) ? data.users : [];\n    const active = users.filter(function(u){ return u.online || u.farmActive || u.farmOk; });\n    const ranking = users.slice().sort(function(a,b){\n      return Number(b.weeklyPoints||0)-Number(a.weeklyPoints||0) || Number(b.points||0)-Number(a.points||0);\n    });\n\n    $(\"activeUsers\").innerHTML = userTable(active, \"active\");\n    $(\"rankingUsers\").innerHTML = userTable(ranking, \"ranking\");\n    $(\"loginMsg\").textContent = \"Usuarios carregados.\";\n  }catch(e){ $(\"loginMsg\").textContent = e.message; }\n}\nfunction renderSchedule(schedule){\n  const date = $(\"slotDate\").value || today();\n  $(\"scheduleRows\").innerHTML = hours.map(function(hour){\n    const slot = schedule.find(function(s){ return s.slotDate === date && s.slotHour === hour; }) || {};\n    return '<div class=\"row24\" data-hour=\"'+hour+'\"><b>'+hour+'</b>' +\n      '<input data-screen=\"1\" placeholder=\"Tela 1 canal\" value=\"'+escapeHtml(slot.screen1Name || \"\")+'\" />' +\n      '<input data-screen=\"2\" placeholder=\"Tela 2 canal\" value=\"'+escapeHtml(slot.screen2Name || \"\")+'\" />' +\n      '<input data-screen=\"3\" placeholder=\"Tela 3 canal\" value=\"'+escapeHtml(slot.screen3Name || \"\")+'\" />' +\n      '<button onclick=\"saveHour(\\''+hour+'\\')\">Salvar</button></div>';\n  }).join(\"\");\n}\nasync function loadSchedule(){\n  try{\n    const data = await apiGet(\"/api/fenix/admin/schedule\");\n    renderSchedule(Array.isArray(data.schedule) ? data.schedule : []);\n    $(\"scheduleMsg\").textContent = \"Grade carregada.\";\n  }catch(e){ $(\"scheduleMsg\").textContent = e.message; }\n}\nasync function saveHour(hour){\n  const row = document.querySelector('.row24[data-hour=\"'+hour+'\"]');\n  const date = $(\"slotDate\").value || today();\n  const s1 = row.querySelector('[data-screen=\"1\"]').value.trim();\n  const s2 = row.querySelector('[data-screen=\"2\"]').value.trim();\n  const s3 = row.querySelector('[data-screen=\"3\"]').value.trim();\n\n  try{\n    await apiPost(\"/api/fenix/admin/schedule\", {\n      adminUsername:$(\"adminUser\").value.trim() || \"GokuuMods\",\n      adminSecret:$(\"adminSecret\").value.trim(),\n      slotDate:date,\n      slotHour:hour,\n      screen1Name:s1, screen1Url:buildKickUrl(s1), screen1Maintenance:!s1,\n      screen2Name:s2, screen2Url:buildKickUrl(s2), screen2Maintenance:!s2,\n      screen3Name:s3, screen3Url:buildKickUrl(s3), screen3Maintenance:!s3\n    });\n    $(\"scheduleMsg\").textContent = \"Horario \" + hour + \" salvo.\";\n  }catch(e){ $(\"scheduleMsg\").textContent = e.message; }\n}\nasync function saveAllVisible(){\n  for(const hour of hours){ await saveHour(hour); }\n  $(\"scheduleMsg\").textContent = \"Grade inteira salva.\";\n}\nasync function saveNotice(){\n  try{\n    await apiPost(\"/api/fenix/admin/notice\", {\n      adminUsername:$(\"adminUser\").value.trim() || \"GokuuMods\",\n      adminSecret:$(\"adminSecret\").value.trim(),\n      message:$(\"noticeText\").value.trim()\n    });\n    $(\"noticeMsg\").textContent = \"Aviso salvo.\";\n  }catch(e){ $(\"noticeMsg\").textContent = e.message; }\n}\n\n$(\"slotDate\").value = today();\n$(\"adminUser\").value = localStorage.getItem(\"fenixAdminUser\") || \"GokuuMods\";\n$(\"adminSecret\").value = localStorage.getItem(\"fenixAdminSecret\") || \"\";\n\nif($(\"adminSecret\").value){\n  $(\"topStatus\").textContent = \"Admin conectado\";\n  loadUsers();\n  loadSchedule();\n}\n</script>\n</body>\n</html>");
+  res.end("<!doctype html>\n<html lang=\"pt-BR\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />\n  <title>Fenix Lurk Admin</title>\n  <style>\n    *{box-sizing:border-box}\n    body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#05070d;color:#fff}\n    header{padding:18px 24px;border-bottom:1px solid rgba(0,255,106,.25);background:#07110c;display:flex;justify-content:space-between;align-items:center;gap:14px}\n    h1{margin:0;color:#00ff6a;font-size:22px}\n    h2{margin:0 0 14px;color:#f5b22a}\n    main{padding:20px;display:grid;gap:16px}\n    .card{border:1px solid rgba(0,255,106,.25);background:rgba(10,15,25,.96);border-radius:16px;padding:16px}\n    .login{display:grid;grid-template-columns:1fr 1fr auto auto;gap:10px;align-items:end}\n    label{display:grid;gap:6px;color:#b8c6d8;font-size:12px;font-weight:900;text-transform:uppercase}\n    input,textarea{width:100%;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:#080b12;color:#fff;padding:11px 12px;font-weight:800}\n    button{border:1px solid rgba(0,255,106,.65);border-radius:10px;background:rgba(0,255,106,.14);color:#fff;padding:11px 14px;cursor:pointer;font-weight:900}\n    button:hover{background:rgba(0,255,106,.25)}\n    .danger{border-color:rgba(255,70,70,.65);background:rgba(255,70,70,.12)}\n    .gold{border-color:rgba(245,178,42,.7);background:rgba(245,178,42,.13)}\n    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}\n    table{width:100%;border-collapse:collapse;font-size:13px}\n    th,td{padding:10px 8px;border-bottom:1px solid rgba(255,255,255,.08);text-align:left}\n    th{color:#00ff6a;background:rgba(0,255,106,.06)}\n    .pill{padding:4px 8px;border-radius:999px;font-size:11px;font-weight:900;display:inline-block}\n    .ok{color:#00ff6a;border:1px solid rgba(0,255,106,.5);background:rgba(0,255,106,.12)}\n    .bad{color:#ff5252;border:1px solid rgba(255,82,82,.5);background:rgba(255,82,82,.12)}\n    .warn{color:#f5b22a;border:1px solid rgba(245,178,42,.5);background:rgba(245,178,42,.12)}\n    .muted{color:#9ba8ba}\n    .row24{display:grid;grid-template-columns:80px 1fr 1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:center}\n    .row24 b{color:#f5b22a}\n    .msg{color:#f5b22a;font-weight:900;margin-top:10px;min-height:20px}\n    @media(max-width:900px){.login,.grid2,.row24{grid-template-columns:1fr}header{display:block}}\n  </style>\n</head>\n<body>\n  <header>\n    <div>\n      <h1>Fenix Lurk Admin</h1>\n      <div style=\"color:#f5b22a;font-weight:800;font-size:13px\">Painel externo · atualiza sem trocar o app dos usuarios</div>\n    </div>\n    <div id=\"topStatus\" style=\"color:#f5b22a;font-weight:900\">Desconectado</div>\n  </header>\n\n  <main>\n    <section class=\"card\">\n      <div class=\"login\">\n        <label>Usuario Admin<input id=\"adminUser\" value=\"GokuuMods\" /></label>\n        <label>Senha Admin<input id=\"adminSecret\" type=\"password\" placeholder=\"senha da Railway\" /></label>\n        <button onclick=\"saveLogin()\">Entrar / Salvar</button>\n        <button class=\"danger\" onclick=\"logout()\">Sair</button>\n      </div>\n      <div class=\"msg\" id=\"loginMsg\">Digite a senha admin para liberar o painel.</div>\n    </section>\n\n    <section class=\"grid2\">\n      <div class=\"card\">\n        <h2>Farm ativo agora</h2>\n        <button onclick=\"loadUsers()\">Atualizar usuarios</button>\n        <div id=\"activeUsers\"></div>\n      </div>\n      <div class=\"card\">\n        <h2>Ranking de pontos da semana</h2>\n        <button onclick=\"loadUsers()\">Atualizar ranking</button>\n        <div id=\"rankingUsers\"></div>\n      </div>\n    </section>\n\n    <section class=\"card\">\n      <h2>Grade de lives por horario</h2>\n      <div class=\"muted\">Vazio = app abre kick.com. Com canal = app abre a live agendada.</div>\n      <br />\n      <label>Data<input id=\"slotDate\" type=\"date\" /></label>\n      <br />\n      <button onclick=\"loadSchedule()\">Carregar grade</button>\n      <button class=\"gold\" onclick=\"saveAllVisible()\">Salvar grade inteira</button>\n      <div class=\"msg\" id=\"scheduleMsg\"></div>\n      <div id=\"scheduleRows\"></div>\n    </section>\n\n    <section class=\"card\">\n      <h2>Aviso para o app</h2>\n      <textarea id=\"noticeText\" rows=\"3\" placeholder=\"Digite o aviso que aparece para os usuarios...\"></textarea>\n      <br /><br />\n      <button onclick=\"saveNotice()\">Salvar aviso</button>\n      <div class=\"msg\" id=\"noticeMsg\"></div>\n    </section>\n  </main>\n\n<script>\nconst API = location.origin;\nconst hours = Array.from({length:24}, (_,i)=>String(i).padStart(2,\"0\")+\":00\");\n\nfunction $(id){return document.getElementById(id)}\nfunction today(){return new Date().toISOString().slice(0,10)}\nfunction escapeHtml(v){\n  return String(v || \"\").replace(/[&<>\"']/g, function(m){\n    return {\"&\":\"&amp;\",\"<\":\"&lt;\",\">\":\"&gt;\",'\"':\"&quot;\",\"'\":\"&#039;\"}[m];\n  });\n}\nfunction adminHeaders(){\n  return {\n    \"Content-Type\":\"application/json\",\n    \"x-fenix-admin\": $(\"adminUser\").value.trim() || \"GokuuMods\",\n    \"x-fenix-admin-secret\": $(\"adminSecret\").value.trim()\n  };\n}\nfunction buildKickUrl(name){\n  const clean = String(name || \"\").trim().replace(/^https?:\\/\\/kick\\.com\\//i,\"\").replace(/^kick\\.com\\//i,\"\").replace(/^@/,\"\");\n  return clean ? \"https://kick.com/\" + clean : \"\";\n}\nfunction saveLogin(){\n  localStorage.setItem(\"fenixAdminUser\", $(\"adminUser\").value.trim() || \"GokuuMods\");\n  localStorage.setItem(\"fenixAdminSecret\", $(\"adminSecret\").value.trim());\n  $(\"topStatus\").textContent = \"Admin conectado\";\n  $(\"loginMsg\").textContent = \"Login salvo neste navegador.\";\n  loadUsers();\n  loadSchedule();\n}\nfunction logout(){\n  localStorage.removeItem(\"fenixAdminSecret\");\n  $(\"adminSecret\").value = \"\";\n  $(\"topStatus\").textContent = \"Desconectado\";\n  $(\"loginMsg\").textContent = \"Senha removida.\";\n}\nasync function apiGet(url){\n  const res = await fetch(API + url, { headers: adminHeaders(), cache:\"no-store\" });\n  const data = await res.json();\n  if(!res.ok || data.ok === false) throw new Error(data.message || \"Erro API\");\n  return data;\n}\nasync function apiPost(url, body){\n  const res = await fetch(API + url, {method:\"POST\",headers:adminHeaders(),body:JSON.stringify(body)});\n  const data = await res.json();\n  if(!res.ok || data.ok === false) throw new Error(data.message || \"Erro API\");\n  return data;\n}\nfunction farmPill(user){\n  if (user.farmOk) return '<span class=\"pill ok\">Farm OK</span>';\n  if (user.farmStatus === \"Atenção\" || user.farmStatus === \"Atencao\") return '<span class=\"pill warn\">Atenção</span>';\n  if (user.online || user.farmActive) return '<span class=\"pill warn\">Incompleto</span>';\n  return '<span class=\"pill bad\">Offline</span>';\n}\nfunction kickPill(user){\n  return (user.kickConnected || user.kickLoggedIn)\n    ? '<span class=\"pill ok\">Sim</span>'\n    : '<span class=\"pill bad\">Nao</span>';\n}\nfunction userTable(users, mode){\n  if(!users.length) return '<p class=\"muted\">Nenhum usuario encontrado.</p>';\n\n  return '<table><thead><tr>' +\n    '<th>#</th><th>Usuario</th><th>Kick</th><th>Farm</th><th>Kick vinculada</th><th>Ultimo ciclo</th><th>Semana</th><th>Total</th><th>Status</th>' +\n    '</tr></thead><tbody>' +\n    users.map(function(u,i){\n      const weekly = Number(u.weeklyPoints || 0);\n      const total = Number(u.points || 0);\n      const approved = weekly >= 1815;\n      const rankingStatus = approved ? '<span class=\"pill ok\">Aprovado 70%</span>' : '<span class=\"pill bad\">Pendente</span>';\n      const status = mode === \"ranking\" ? rankingStatus : farmPill(u);\n\n      return '<tr>' +\n        '<td>'+(i+1)+'</td>' +\n        '<td><b>'+escapeHtml(u.username || \"-\")+'</b></td>' +\n        '<td>'+escapeHtml(u.kickUsername || u.kickName || \"-\")+'</td>' +\n        '<td>'+farmPill(u)+'</td>' +\n        '<td>'+kickPill(u)+'</td>' +\n        '<td>'+escapeHtml(u.lastCycleText || \"Nunca\")+'</td>' +\n        '<td>'+weekly+' pts</td>' +\n        '<td>'+total+' pts</td>' +\n        '<td>'+status+'</td>' +\n      '</tr>';\n    }).join(\"\") + '</tbody></table>';\n}\nasync function loadUsers(){\n  try{\n    const data = await apiGet(\"/api/fenix/admin/online-users\");\n    const users = Array.isArray(data.users) ? data.users : [];\n    const active = users.filter(function(u){ return u.online || u.farmActive || u.farmOk; });\n    const ranking = users.slice().sort(function(a,b){\n      return Number(b.weeklyPoints||0)-Number(a.weeklyPoints||0) || Number(b.points||0)-Number(a.points||0);\n    });\n\n    $(\"activeUsers\").innerHTML = userTable(active, \"active\");\n    $(\"rankingUsers\").innerHTML = userTable(ranking, \"ranking\");\n    $(\"loginMsg\").textContent = \"Usuarios carregados.\";\n  }catch(e){ $(\"loginMsg\").textContent = e.message; }\n}\nfunction renderSchedule(schedule){\n  const date = $(\"slotDate\").value || today();\n  $(\"scheduleRows\").innerHTML = hours.map(function(hour){\n    const slot = schedule.find(function(s){ return s.slotDate === date && s.slotHour === hour; }) || {};\n    return '<div class=\"row24\" data-hour=\"'+hour+'\"><b>'+hour+'</b>' +\n      '<input data-screen=\"1\" placeholder=\"Tela 1 canal\" value=\"'+escapeHtml(slot.screen1Name || \"\")+'\" />' +\n      '<input data-screen=\"2\" placeholder=\"Tela 2 canal\" value=\"'+escapeHtml(slot.screen2Name || \"\")+'\" />' +\n      '<input data-screen=\"3\" placeholder=\"Tela 3 canal\" value=\"'+escapeHtml(slot.screen3Name || \"\")+'\" />' +\n      '<button onclick=\"saveHour(\\''+hour+'\\')\">Salvar</button></div>';\n  }).join(\"\");\n}\nasync function loadSchedule(){\n  try{\n    const data = await apiGet(\"/api/fenix/admin/schedule\");\n    renderSchedule(Array.isArray(data.schedule) ? data.schedule : []);\n    $(\"scheduleMsg\").textContent = \"Grade carregada.\";\n  }catch(e){ $(\"scheduleMsg\").textContent = e.message; }\n}\nasync function saveHour(hour){\n  const row = document.querySelector('.row24[data-hour=\"'+hour+'\"]');\n  const date = $(\"slotDate\").value || today();\n  const s1 = row.querySelector('[data-screen=\"1\"]').value.trim();\n  const s2 = row.querySelector('[data-screen=\"2\"]').value.trim();\n  const s3 = row.querySelector('[data-screen=\"3\"]').value.trim();\n\n  try{\n    await apiPost(\"/api/fenix/admin/schedule\", {\n      adminUsername:$(\"adminUser\").value.trim() || \"GokuuMods\",\n      adminSecret:$(\"adminSecret\").value.trim(),\n      slotDate:date,\n      slotHour:hour,\n      screen1Name:s1, screen1Url:buildKickUrl(s1), screen1Maintenance:!s1,\n      screen2Name:s2, screen2Url:buildKickUrl(s2), screen2Maintenance:!s2,\n      screen3Name:s3, screen3Url:buildKickUrl(s3), screen3Maintenance:!s3\n    });\n    $(\"scheduleMsg\").textContent = \"Horario \" + hour + \" salvo.\";\n  }catch(e){ $(\"scheduleMsg\").textContent = e.message; }\n}\nasync function saveAllVisible(){\n  for(const hour of hours){ await saveHour(hour); }\n  $(\"scheduleMsg\").textContent = \"Grade inteira salva.\";\n}\nasync function saveNotice(){\n  try{\n    await apiPost(\"/api/fenix/admin/notice\", {\n      adminUsername:$(\"adminUser\").value.trim() || \"GokuuMods\",\n      adminSecret:$(\"adminSecret\").value.trim(),\n      message:$(\"noticeText\").value.trim()\n    });\n    $(\"noticeMsg\").textContent = \"Aviso salvo.\";\n  }catch(e){ $(\"noticeMsg\").textContent = e.message; }\n}\n\n$(\"slotDate\").value = today();\n$(\"adminUser\").value = localStorage.getItem(\"fenixAdminUser\") || \"GokuuMods\";\n$(\"adminSecret\").value = localStorage.getItem(\"fenixAdminSecret\") || \"\";\n\nif($(\"adminSecret\").value){\n  $(\"topStatus\").textContent = \"Admin conectado\";\n  loadUsers();\n  loadSchedule();\n}\n</script>\n</body>\n</html>");
 });
 
 app.listen(PORT, () => {

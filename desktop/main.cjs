@@ -1,4 +1,5 @@
-﻿const { app, BrowserWindow, Menu, ipcMain, session, shell } = require("electron");
+﻿const { autoUpdater } = require("electron-updater");
+const { app, BrowserWindow, Menu, ipcMain, session, shell } = require("electron");
 const path = require("path");
 const fenixUserDataPath = path.join(app.getPath("appData"), "Fenix Lurk");
 
@@ -29,6 +30,7 @@ function createWindow() {
 
   Menu.setApplicationMenu(null);
 
+  fenixMainWindowForUpdate = mainWindow;
   mainWindow.loadFile(path.join(__dirname, "index.html"));
 
   // FENIX_MAXIMIZAR_JANELA
@@ -51,7 +53,136 @@ function createWindow() {
   });
 }
 
+
+
+// FENIX_AUTO_UPDATE_MAIN_FINAL
+let fenixMainWindowForUpdate = null;
+
+function sendFenixUpdateStatus(payload) {
+  try {
+    const target = fenixMainWindowForUpdate || BrowserWindow.getAllWindows()[0];
+    if (target && !target.isDestroyed()) {
+      target.webContents.send("fenix:update-status", payload);
+    }
+  } catch (error) {
+    console.error("Erro enviando status update:", error);
+  }
+}
+
+function setupFenixAutoUpdater() {
+  try {
+    autoUpdater.autoDownload = false;
+    autoUpdater.allowPrerelease = false;
+    autoUpdater.allowDowngrade = false;
+
+    autoUpdater.on("checking-for-update", () => {
+      sendFenixUpdateStatus({
+        type: "checking",
+        message: "Verificando atualizacao..."
+      });
+    });
+
+    autoUpdater.on("update-available", (info) => {
+      sendFenixUpdateStatus({
+        type: "available",
+        version: info?.version || "",
+        message: "Atualizacao disponivel."
+      });
+    });
+
+    autoUpdater.on("update-not-available", () => {
+      sendFenixUpdateStatus({
+        type: "none",
+        message: "Voce ja esta usando a versao mais recente."
+      });
+    });
+
+    autoUpdater.on("download-progress", (progress) => {
+      sendFenixUpdateStatus({
+        type: "progress",
+        percent: Math.floor(progress?.percent || 0),
+        message: "Baixando atualizacao..."
+      });
+    });
+
+    autoUpdater.on("update-downloaded", () => {
+      sendFenixUpdateStatus({
+        type: "downloaded",
+        message: "Atualizacao baixada. Reinicie para instalar."
+      });
+    });
+
+    autoUpdater.on("error", (error) => {
+      sendFenixUpdateStatus({
+        type: "error",
+        message: error?.message || "Erro ao verificar atualizacao."
+      });
+    });
+  } catch (error) {
+    console.error("Erro setup autoUpdater:", error);
+  }
+}
+
+ipcMain.handle("fenix:update-check", async () => {
+  try {
+    if (!app.isPackaged) {
+      return {
+        ok: false,
+        message: "Atualizacao automatica funciona apenas no app instalado."
+      };
+    }
+
+    await autoUpdater.checkForUpdates();
+    return {
+      ok: true,
+      message: "Verificacao iniciada."
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error?.message || String(error)
+    };
+  }
+});
+
+ipcMain.handle("fenix:update-download", async () => {
+  try {
+    if (!app.isPackaged) {
+      return {
+        ok: false,
+        message: "Download de atualizacao funciona apenas no app instalado."
+      };
+    }
+
+    await autoUpdater.downloadUpdate();
+    return {
+      ok: true,
+      message: "Download iniciado."
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error?.message || String(error)
+    };
+  }
+});
+
+ipcMain.handle("fenix:update-install", async () => {
+  try {
+    autoUpdater.quitAndInstall(false, true);
+    return {
+      ok: true
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error?.message || String(error)
+    };
+  }
+});
+
 app.whenReady().then(() => {
+  setupFenixAutoUpdater();
   app.setAppUserModelId("com.fenix.lurk");
   createWindow();
 

@@ -1095,3 +1095,53 @@ button[title="Admin"] {
 body > #fenixResetAccessExitBtn {
   display: none !important;
 }
+
+
+/* FENIX_AUTO_UPDATE_COMPACT_STYLE_FINAL */
+.fenix-compact-update-box {
+  position: static !important;
+  left: auto !important;
+  bottom: auto !important;
+  width: calc(100% - 16px);
+  z-index: 10;
+  margin: 10px 8px 12px;
+  padding: 9px;
+  border: 1px solid rgba(0, 255, 106, 0.45);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(0, 255, 106, 0.12), rgba(5, 8, 14, 0.98));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+.fenix-compact-update-title {
+  color: #00ff6a;
+  font-size: 10px;
+  font-weight: 1000;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.fenix-compact-update-text {
+  color: #d8e3f0;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.25;
+  margin-bottom: 7px;
+}
+
+.fenix-compact-update-box button {
+  width: 100%;
+  min-height: 30px;
+  margin-top: 5px;
+  border: 1px solid rgba(0, 255, 106, 0.65);
+  border-radius: 10px;
+  background: rgba(0, 255, 106, 0.14);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 1000;
+  cursor: pointer;
+}
+
+.fenix-compact-update-box button:hover {
+  background: rgba(0, 255, 106, 0.24);
+}

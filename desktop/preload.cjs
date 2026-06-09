@@ -7,3 +7,23 @@ contextBridge.exposeInMainWorld("fenixDesktop", {
   isKickLoggedIn: () => ipcRenderer.invoke("fenix:is-kick-logged-in"),
   openExternal: (url) => ipcRenderer.invoke("fenix:open-external", url)
 });
+
+
+// FENIX_AUTO_UPDATE_PRELOAD_FINAL
+try {
+  const { contextBridge, ipcRenderer } = require("electron");
+
+  contextBridge.exposeInMainWorld("fenixUpdater", {
+    check: () => ipcRenderer.invoke("fenix:update-check"),
+    download: () => ipcRenderer.invoke("fenix:update-download"),
+    install: () => ipcRenderer.invoke("fenix:update-install"),
+    onStatus: (callback) => {
+      ipcRenderer.removeAllListeners("fenix:update-status");
+      ipcRenderer.on("fenix:update-status", (_event, payload) => {
+        if (typeof callback === "function") callback(payload);
+      });
+    }
+  });
+} catch (error) {
+  console.error("Erro preload auto-update:", error);
+}

@@ -4,8 +4,8 @@
   refreshSeconds: 60,
   cycleSeconds: 600,
   quality: "160p",
-  weeklyGoal: 300,
-  weeklyMinimum: 210
+  weeklyGoal: 2592,
+  weeklyMinimum: 1815
 };
 
 let fenixSession = null;
@@ -325,7 +325,7 @@ function updateUserUi(user) {
 
   if (weeklyPoints >= CONFIG.weeklyMinimum) {
     $("weeklyStatus").textContent = "LIBERADO";
-    $("weeklyText").textContent = "Voce bateu 70% e pode entrar na proxima grade.";
+    $("weeklyText").textContent = "Voce bateu 70% da semana e pode entrar na proxima grade.";
   } else {
     $("weeklyStatus").textContent = "NAO LIBERADO";
     $("weeklyText").textContent = "Continue farmando para liberar a proxima grade.";
@@ -944,8 +944,8 @@ async function loadAdminUsers() {
       : '<tr><td colspan="8" class="admin-empty-cell">Ninguem farmando agora.</td></tr>';
 
     const rankingRows = ranking.map((user, index) => {
-      const approved = user.weeklyPoints >= 210;
-      const percent = Math.min(100, Math.floor((user.weeklyPoints / 300) * 100));
+      const approved = user.weeklyPoints >= 1815;
+      const percent = Math.min(100, Math.floor((user.weeklyPoints / 2592) * 100));
 
       return [
         "<tr>",
@@ -970,7 +970,7 @@ async function loadAdminUsers() {
       "</table>",
       "</div>",
       '<div class="admin-table-card">',
-      '<div class="admin-table-title"><span>Ranking de pontos da semana</span><small>Meta 300 pontos - minimo 70% = 210</small></div>',
+      '<div class="admin-table-title"><span>Ranking de pontos da semana</span><small>Meta 2592 pontos - minimo 70% = 1815</small></div>',
       '<table class="admin-users-table">',
       '<thead><tr><th>#</th><th>Usuario</th><th>Kick</th><th>Semana</th><th>Total</th><th>% Meta</th><th>Status</th></tr></thead>',
       "<tbody>" + rankingRows + "</tbody>",
@@ -1959,4 +1959,145 @@ document.addEventListener("DOMContentLoaded", () => {
   setTimeout(fenixEnsureResetExitButtonFinal, 800);
   setTimeout(fenixEnsureResetExitButtonFinal, 2000);
   setInterval(fenixEnsureResetExitButtonFinal, 3000);
+});
+
+/* FENIX_APP_FAST_HEARTBEAT_RENDERER_FINAL */
+async function sendFenixFastHeartbeat() {
+  if (!fenixSession?.sessionId) return;
+
+  try {
+    await fetch(CONFIG.adminApi + "/api/fenix/app/heartbeat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        sessionId: fenixSession.sessionId,
+        tabsLoggedIn: Boolean(kickTabsLoggedIn)
+      })
+    });
+  } catch (error) {
+    console.error("Erro heartbeat Fenix:", error);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(sendFenixFastHeartbeat, 5000);
+  setInterval(sendFenixFastHeartbeat, 30000);
+});
+
+
+/* FENIX_AUTO_UPDATE_COMPACT_FINAL */
+function fenixEnsureCompactUpdateButton() {
+  if (document.getElementById("fenixCompactUpdateBox")) return;
+
+  const box = document.createElement("div");
+  box.id = "fenixCompactUpdateBox";
+  box.className = "fenix-compact-update-box";
+  box.innerHTML = [
+    '<div class="fenix-compact-update-title">Atualizacao</div>',
+    '<div id="fenixCompactUpdateText" class="fenix-compact-update-text">Verificar nova versao</div>',
+    '<button id="fenixCompactCheckUpdateBtn" type="button">Verificar Atualizacao</button>',
+    '<button id="fenixCompactDownloadUpdateBtn" type="button" style="display:none">Baixar</button>',
+    '<button id="fenixCompactInstallUpdateBtn" type="button" style="display:none">Instalar e Reiniciar</button>'
+  ].join("");
+
+  
+  const sidebar =
+    document.querySelector(".sidebar") ||
+    document.querySelector(".side") ||
+    document.querySelector(".left") ||
+    document.querySelector("aside") ||
+    document.body;
+
+  const startupCheckbox =
+    document.querySelector('input[type="checkbox"]') ||
+    document.getElementById("startWithWindows") ||
+    document.getElementById("startupToggle");
+
+  const startupRow = startupCheckbox
+    ? startupCheckbox.closest("label, .row, .setting-row, .startup-row, div")
+    : null;
+
+  if (startupRow && startupRow.parentElement) {
+    startupRow.parentElement.insertBefore(box, startupRow);
+  } else {
+    sidebar.appendChild(box);
+  }
+  
+
+  const textEl = document.getElementById("fenixCompactUpdateText");
+  const checkBtn = document.getElementById("fenixCompactCheckUpdateBtn");
+  const downloadBtn = document.getElementById("fenixCompactDownloadUpdateBtn");
+  const installBtn = document.getElementById("fenixCompactInstallUpdateBtn");
+
+  function setText(message) {
+    if (textEl) textEl.textContent = message || "";
+  }
+
+  if (!window.fenixUpdater) {
+    setText("Disponivel no app instalado");
+    return;
+  }
+
+  window.fenixUpdater.onStatus((payload) => {
+    const type = payload?.type || "";
+    const version = payload?.version || "";
+    const message = payload?.message || "";
+
+    if (type === "checking") {
+      setText("Verificando...");
+      downloadBtn.style.display = "none";
+      installBtn.style.display = "none";
+    }
+
+    if (type === "available") {
+      setText("Nova versao " + version);
+      downloadBtn.style.display = "block";
+      installBtn.style.display = "none";
+    }
+
+    if (type === "none") {
+      setText("App atualizado");
+      downloadBtn.style.display = "none";
+      installBtn.style.display = "none";
+    }
+
+    if (type === "progress") {
+      setText("Baixando " + (payload.percent || 0) + "%");
+      downloadBtn.style.display = "none";
+      installBtn.style.display = "none";
+    }
+
+    if (type === "downloaded") {
+      setText("Pronto para instalar");
+      downloadBtn.style.display = "none";
+      installBtn.style.display = "block";
+    }
+
+    if (type === "error") {
+      setText(message || "Erro ao atualizar");
+      downloadBtn.style.display = "none";
+      installBtn.style.display = "none";
+    }
+  });
+
+  checkBtn.addEventListener("click", async () => {
+    const result = await window.fenixUpdater.check();
+    if (result && result.ok === false) setText(result.message || "Erro ao verificar");
+  });
+
+  downloadBtn.addEventListener("click", async () => {
+    const result = await window.fenixUpdater.download();
+    if (result && result.ok === false) setText(result.message || "Erro ao baixar");
+  });
+
+  installBtn.addEventListener("click", async () => {
+    const result = await window.fenixUpdater.install();
+    if (result && result.ok === false) setText(result.message || "Erro ao instalar");
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(fenixEnsureCompactUpdateButton, 1000);
 });
