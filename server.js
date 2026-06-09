@@ -655,7 +655,9 @@ app.get('/api/fenix/kick/connect-url', (req, res) => {
   }
 
   const data = readFenixData();
-  const session = data.sessions.find((item) => item.id === sessionId);
+  const session = data.sessions.find((item) => {
+    return item.id === sessionId || item.sessionId === sessionId;
+  });
 
   if (!session) {
     return res.status(401).json({
@@ -785,7 +787,9 @@ app.get('/api/fenix/kick/callback', async (req, res) => {
 app.get('/api/fenix/app/me', (req, res) => {
   const sessionId = String(req.query?.sessionId || '').trim();
   const data = readFenixData();
-  const session = data.sessions.find((item) => item.id === sessionId);
+  const session = data.sessions.find((item) => {
+    return item.id === sessionId || item.sessionId === sessionId;
+  });
 
   if (!session) {
     return res.status(401).json({ ok: false, message: 'Sessao invalida.' });
@@ -1194,6 +1198,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
