@@ -2575,7 +2575,20 @@ function fenixRenderGradeSorteioSimplesPage({ applicants = [], draw = null, mess
   </section>
 
   <section>
-    <h2>3. Gerar sorteio</h2>
+    <h2>3. Limpar inscritos</h2>
+    <div class="muted">Use isso quando quiser apagar todos e importar a planilha completa atualizada.</div>
+    <form method="POST" action="/admin/grade-sorteio-melhorado/limpar-inscritos">
+      <label>Senha Admin:</label>
+      <input name="adminSecret" type="password" placeholder="Digite a senha admin da Railway" required>
+      <br><br>
+      <label>Confirmação:</label>
+      <input name="confirmText" placeholder="Digite APAGAR para confirmar" required>
+      <button type="submit">Limpar todos os inscritos</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>4. Gerar sorteio</h2>
     <form method="POST" action="/admin/grade-sorteio-simples/gerar">
       <label>Senha Admin:</label>
       <input name="adminSecret" type="password" placeholder="Digite a senha admin da Railway" required>
@@ -3085,7 +3098,7 @@ function fenixRenderGradeSorteioMelhoradoPage({ applicants = [], draw = null, me
   </section>
 
   <section>
-    <h2>4. Resumo de distribuição</h2>
+    <h2>5. Resumo de distribuição</h2>
     <table>
       <thead>
         <tr>
@@ -3100,13 +3113,13 @@ function fenixRenderGradeSorteioMelhoradoPage({ applicants = [], draw = null, me
   </section>
 
   <section>
-    <h2>5. Mensagens das vagas abertas</h2>
+    <h2>6. Mensagens das vagas abertas</h2>
     <div class="muted">Copie e cole no grupo quando quiser preencher manualmente.</div>
     <textarea readonly>${fenixHtmlEscape(vacancyText || 'Nenhuma vaga aberta gerada ainda.')}</textarea>
   </section>
 
   <section>
-    <h2>6. Grade sorteada</h2>
+    <h2>7. Grade sorteada</h2>
     <div class="muted">Rascunho. Ainda não altera a grade ativa do app.</div>
     ${drawTables || '<p>Nenhum sorteio carregado ainda.</p>'}
   </section>
@@ -3202,6 +3215,30 @@ app.post('/admin/grade-sorteio-melhorado/gerar', fenixMelhoradoAdminAuth, (req, 
     applicants,
     draw,
     message: 'Sorteio gerado. Inscritos: ' + applicants.length + ' | Vagos: ' + draw.summary.totalVacantHours
+  }));
+});
+
+// FENIX_GRADE_SORTEIO_LIMPAR_INSCRITOS_FINAL
+app.post('/admin/grade-sorteio-melhorado/limpar-inscritos', fenixMelhoradoAdminAuth, (req, res) => {
+  const confirmText = String(req.body?.confirmText || '').trim().toUpperCase();
+
+  if (confirmText !== 'APAGAR') {
+    const applicants = fenixReadFormApplicantsFileFinal();
+    const draw = fenixReadGradeDrawFileFinal();
+
+    return res.type('html').send(fenixRenderGradeSorteioMelhoradoPage({
+      applicants,
+      draw,
+      message: 'Para limpar todos os inscritos, digite APAGAR no campo de confirmação.'
+    }));
+  }
+
+  fenixSaveFormApplicantsFileFinal([]);
+
+  return res.type('html').send(fenixRenderGradeSorteioMelhoradoPage({
+    applicants: [],
+    draw: fenixReadGradeDrawFileFinal(),
+    message: 'Todos os inscritos foram apagados. Agora você pode importar a planilha completa novamente.'
   }));
 });
 
