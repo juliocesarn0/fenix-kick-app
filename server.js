@@ -2941,6 +2941,31 @@ app.get('/admin/grade-sorteio-melhorado', (req, res) => {
   res.redirect('/admin/grade-sorteio-simples');
 });
 
+// FENIX_FIX_LIMPAR_INSCRITOS_ALIAS_FINAL
+app.post('/admin/grade-sorteio-melhorado/limpar-inscritos', (req, res, next) => {
+  req.headers['x-fenix-admin'] = 'GokuuMods';
+  req.headers['x-fenix-admin-secret'] = String(req.body?.adminSecret || '').trim();
+  next();
+}, requireFenixAdmin, (req, res) => {
+  const confirmText = String(req.body?.confirmText || '').trim().toUpperCase();
+
+  if (confirmText !== 'APAGAR') {
+    return res.type('html').send(fenixRenderGradeSorteioSimplesPage({
+      applicants: fenixReadFormApplicantsFileFinal(),
+      draw: fenixReadGradeDrawFileFinal(),
+      message: 'Para limpar todos os inscritos, digite APAGAR no campo de confirmação.'
+    }));
+  }
+
+  fenixSaveFormApplicantsFileFinal([]);
+
+  return res.type('html').send(fenixRenderGradeSorteioSimplesPage({
+    applicants: [],
+    draw: fenixReadGradeDrawFileFinal(),
+    message: 'Todos os inscritos foram apagados. Agora importe a planilha completa novamente.'
+  }));
+});
+
 app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
