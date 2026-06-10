@@ -1249,7 +1249,7 @@ app.get('/api/fenix/admin/online-users', requireFenixAdmin, (req, res) => {
     const kickConnected = Boolean(user.kickConnected || user.kickLoggedIn || heartbeat?.kickConnected);
     const tabsLoggedIn = Boolean(heartbeat?.tabsLoggedIn);
 
-    const farmOk = Boolean(kickConnected && (appOnline || cycleActive));
+    const farmOk = Boolean(kickConnected && ((appOnline && tabsLoggedIn) || cycleActive));
 
     let farmStatus = 'Offline';
 
@@ -1524,6 +1524,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
