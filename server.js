@@ -2214,16 +2214,19 @@ app.post('/admin/grade-sorteio/importar', (req, res, next) => {
 
 
 // FENIX_FORM_APPLICANTS_SEPARATE_FILE_FINAL
+function fenixFormApplicantsBaseDirFinal() {
+  const file = String(FENIX_DATA_FILE || "./fenix-data.json");
+  const normalized = file.replace(/\\/g, "/");
+  const index = normalized.lastIndexOf("/");
+  return index >= 0 ? normalized.slice(0, index) : ".";
+}
+
 function fenixFormApplicantsFileFinal() {
-  const pathLib = require("path");
-  const baseDir = pathLib.dirname(FENIX_DATA_FILE);
-  return pathLib.join(baseDir, "fenix-form-applicants.json");
+  return fenixFormApplicantsBaseDirFinal() + "/fenix-form-applicants.json";
 }
 
 function fenixGradeDrawFileFinal() {
-  const pathLib = require("path");
-  const baseDir = pathLib.dirname(FENIX_DATA_FILE);
-  return pathLib.join(baseDir, "fenix-grade-draw.json");
+  return fenixFormApplicantsBaseDirFinal() + "/fenix-grade-draw.json";
 }
 
 function fenixReadFormApplicantsFileFinal() {
@@ -2242,11 +2245,10 @@ function fenixReadFormApplicantsFileFinal() {
 }
 
 function fenixSaveFormApplicantsFileFinal(applicants) {
-  const pathLib = require("path");
   const file = fenixFormApplicantsFileFinal();
   const list = Array.isArray(applicants) ? applicants : [];
 
-  fs.mkdirSync(pathLib.dirname(file), { recursive: true });
+  fs.mkdirSync(fenixFormApplicantsBaseDirFinal(), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(list, null, 2), "utf8");
 
   return list;
@@ -2266,10 +2268,9 @@ function fenixReadGradeDrawFileFinal() {
 }
 
 function fenixSaveGradeDrawFileFinal(draw) {
-  const pathLib = require("path");
   const file = fenixGradeDrawFileFinal();
 
-  fs.mkdirSync(pathLib.dirname(file), { recursive: true });
+  fs.mkdirSync(fenixFormApplicantsBaseDirFinal(), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(draw || null, null, 2), "utf8");
 
   return draw;
