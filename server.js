@@ -1724,6 +1724,19 @@ function fenixPickVacantHours(vacancyPerDay) {
   return new Set(hours.slice(0, count));
 }
 
+
+function fenixSaveFormApplicantsFinal(applicants) {
+  const data = readFenixData();
+  data.formApplicants = Array.isArray(applicants) ? applicants : [];
+  fs.writeFileSync(FENIX_DATA_FILE, JSON.stringify(data, null, 2), "utf8");
+  return data.formApplicants;
+}
+
+function fenixReadFormApplicantsFinal() {
+  const data = readFenixData();
+  return Array.isArray(data.formApplicants) ? data.formApplicants : [];
+}
+
 function fenixGenerateGradeDraw(applicants, options = {}) {
   const vacancyPerDay = Math.max(0, Math.min(24, Number(options.vacancyPerDay || 0)));
   const screensPerHour = 3;
@@ -2174,7 +2187,7 @@ app.post('/admin/grade-sorteio/importar', (req, res, next) => {
       }
     }
 
-    writeFenixData(data);
+    fenixSaveFormApplicantsFinal(data.formApplicants);
 
     return res.type('html').send(`
       <body style="background:#090909;color:white;font-family:Arial;padding:30px">
@@ -2199,11 +2212,11 @@ app.post('/admin/grade-sorteio/importar', (req, res, next) => {
 app.get('/api/fenix/admin/form-applicants', requireFenixAdmin, (req, res) => {
   const data = readFenixData();
 
-  data.formApplicants = Array.isArray(data.formApplicants) ? data.formApplicants : [];
+  const applicants = fenixReadFormApplicantsFinal();
 
   res.json({
     ok: true,
-    applicants: data.formApplicants
+    applicants: applicants
       .slice()
       .sort((a, b) => String(a.nick || '').localeCompare(String(b.nick || '')))
   });
@@ -2248,7 +2261,7 @@ app.post('/api/fenix/admin/form-applicants/import', requireFenixAdmin, (req, res
     }
   }
 
-  writeFenixData(data);
+  fenixSaveFormApplicantsFinal(data.formApplicants);
 
   res.json({
     ok: true,
