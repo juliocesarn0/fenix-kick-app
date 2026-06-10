@@ -51,8 +51,9 @@
         "repo": "fenix-kick-app"
       }
     ],
-    "artifactName": "Fenix.Lurk.Setup.${version}.${ext}"
+    "artifactName": "Fenix.Lurk.Setup.${version}.${ext}",
+    "publisherName": "Fenix Lurk"
   },
   "productName": "Fenix Lurk",
-  "author": "GokuuMods"
+  "author": "Fenix Lurk"
 }
