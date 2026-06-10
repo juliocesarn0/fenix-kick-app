@@ -22,6 +22,9 @@ const KICK_ID_URL = 'https://id.kick.com';
 const KICK_API_URL = 'https://api.kick.com/public/v1';
 
 app.use(express.json());
+
+// FENIX_URLENCODED_LIMIT_FINAL
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.urlencoded({ extended: true }));
 app.set('trust proxy', 1);
 app.use(
@@ -2627,49 +2630,78 @@ app.post('/admin/grade-sorteio-simples/ver', fenixSimpleAdminAuth, (req, res) =>
   }));
 });
 
+
 app.post('/admin/grade-sorteio-simples/importar', fenixSimpleAdminAuth, (req, res) => {
-  const pasted = String(req.body?.text || '');
-  const parsed = fenixParseApplicantsFromPaste(pasted);
+  try {
+    const pasted = String(req.body && req.body.text ? req.body.text : '');
 
-  if (!parsed.length) {
-    return res.type('html').send(fenixRenderGradeSorteioSimplesPage({
-      message: 'Erro: nenhum inscrito encontrado. Cole a planilha com cabeçalho.'
-    }));
-  }
-
-  const currentList = fenixReadFormApplicantsFileFinal();
-  const current = new Map();
-
-  for (const applicant of currentList) {
-    const key = fenixNormalizeKickNick(applicant.slug || applicant.nick).toLowerCase();
-    if (key) current.set(key, applicant);
-  }
-
-  for (const applicant of parsed) {
-    const key = applicant.slug;
-
-    if (current.has(key)) {
-      const existing = current.get(key);
-      Object.assign(existing, {
-        ...existing,
-        ...applicant,
-        ignored: Boolean(existing.ignored),
-        updatedAt: new Date().toISOString()
-      });
-    } else {
-      currentList.push(applicant);
-      current.set(key, applicant);
+    if (!pasted.trim()) {
+      return res.type('html').send(fenixRenderGradeSorteioSimplesPage({
+        message: 'Erro: o campo da planilha veio vazio. Cole cabeçalho + respostas.'
+      }));
     }
+
+    const parsed = fenixParseApplicantsFromPaste(pasted);
+
+    if (!parsed.length) {
+      return res.type('html').send(fenixRenderGradeSorteioSimplesPage({
+        message: 'Erro: nenhum inscrito encontrado. Cole a planilha com cabeçalho.'
+      }));
+    }
+
+    const currentList = fenixReadFormApplicantsFileFinal();
+    const current = new Map();
+
+    for (const applicant of currentList) {
+      const key = fenixNormalizeKickNick(applicant.slug || applicant.nick).toLowerCase();
+      if (key) current.set(key, applicant);
+    }
+
+    for (const applicant of parsed) {
+      const key = applicant.slug;
+
+      if (current.has(key)) {
+        const existing = current.get(key);
+        Object.assign(existing, {
+          ...existing,
+          ...applicant,
+          ignored: Boolean(existing.ignored),
+          updatedAt: new Date().toISOString()
+        });
+      } else {
+        currentList.push(applicant);
+        current.set(key, applicant);
+      }
+    }
+
+    const saved = fenixSaveFormApplicantsFileFinal(currentList);
+
+    return res.type('html').send(fenixRenderGradeSorteioSimplesPage({
+      applicants: saved,
+      draw: fenixReadGradeDrawFileFinal(),
+      message: 'Importado com sucesso. Total salvo: ' + saved.length
+    }));
+  } catch (error) {
+    console.error('ERRO IMPORTAR GRADE SORTEIO SIMPLES:', error);
+
+    return res.type('html').send(`
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Erro importação</title>
+</head>
+<body style="background:#090909;color:white;font-family:Arial;padding:30px">
+  <h1 style="color:#ff7777">Erro ao importar</h1>
+  <p>O backend encontrou um erro. Detalhe:</p>
+  <pre style="white-space:pre-wrap;background:#111;border:1px solid #333;padding:15px;border-radius:10px;color:#ffb3b3">${String(error && (error.stack || error.message) || error)}</pre>
+  <a href="/admin/grade-sorteio-simples" style="color:#f3c451;font-size:18px">Voltar</a>
+</body>
+</html>
+    `);
   }
-
-  const saved = fenixSaveFormApplicantsFileFinal(currentList);
-
-  res.type('html').send(fenixRenderGradeSorteioSimplesPage({
-    applicants: saved,
-    draw: fenixReadGradeDrawFileFinal(),
-    message: 'Importado com sucesso. Total salvo: ' + saved.length
-  }));
 });
+
 
 app.post('/admin/grade-sorteio-simples/gerar', fenixSimpleAdminAuth, (req, res) => {
   const applicants = fenixReadFormApplicantsFileFinal();
