@@ -2622,7 +2622,47 @@ function fenixRenderGradeSorteioSimplesPage({ applicants = [], draw = null, mess
   </section>
 
   <section>
-    <h2>4. Grade sorteada</h2>
+    <h2>4. Resumo rápido da grade</h2>
+    <div class="muted">Use esse resumo para conferir se a grade ficou boa antes de aplicar no app.</div>
+    ${(() => {
+      const summary = fenixDrawVisualSummaryFinal(draw);
+      return `
+        <table>
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="ok">Preenchidas pelo sorteio</span></td>
+              <td>${summary.filled}</td>
+            </tr>
+            <tr>
+              <td><span class="vago">VAGO</span> - reservado por você</td>
+              <td>${summary.reservedVacant}</td>
+            </tr>
+            <tr>
+              <td><span class="bad">PREENCHER MANUAL</span> - faltou pessoa no sorteio</td>
+              <td>${summary.manualFill}</td>
+            </tr>
+            <tr>
+              <td>Total de telas</td>
+              <td>${summary.totalScreens}</td>
+            </tr>
+            <tr>
+              <td>Pessoas com 0 sorteios</td>
+              <td>${summary.zeroApplicants.length ? summary.zeroApplicants.join(", ") : "Nenhuma"}</td>
+            </tr>
+          </tbody>
+        </table>
+      `;
+    })()}
+  </section>
+
+  <section>
+    <h2>5. Grade sorteada</h2>
     <div class="muted">Rascunho. Ainda não altera a grade ativa do app.</div>
     <table>
       <thead>
@@ -3152,6 +3192,33 @@ function fenixGenerateGradeDrawAdminChooseVagosFinal(applicants, options = {}) {
       zeroApplicants,
       usage
     }
+  };
+}
+
+// FENIX_SIMPLE_DRAW_RESUMO_VISUAL_FINAL
+function fenixDrawVisualSummaryFinal(draw) {
+  const rows = draw && Array.isArray(draw.rows) ? draw.rows : [];
+
+  let filled = 0;
+  let reservedVacant = 0;
+  let manualFill = 0;
+
+  for (const row of rows) {
+    for (const screen of row.screens || []) {
+      if (screen.status === 'OK') filled += 1;
+      else if (screen.status === 'VAGO') reservedVacant += 1;
+      else manualFill += 1;
+    }
+  }
+
+  const zeroApplicants = draw?.summary?.zeroApplicants || [];
+
+  return {
+    filled,
+    reservedVacant,
+    manualFill,
+    zeroApplicants,
+    totalScreens: filled + reservedVacant + manualFill
   };
 }
 
