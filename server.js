@@ -2936,6 +2936,11 @@ function fenixGenerateGradeDrawImprovedFinal(applicants, options = {}) {
   };
 }
 
+// FENIX_RESTORE_GRADE_MELHORADO_REDIRECT
+app.get('/admin/grade-sorteio-melhorado', (req, res) => {
+  res.redirect('/admin/grade-sorteio-simples');
+});
+
 app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
