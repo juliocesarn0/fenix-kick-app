@@ -2209,6 +2209,149 @@ app.post('/admin/grade-sorteio/importar', (req, res, next) => {
 });
 
 
+
+// FENIX_FORM_APPLICANTS_SEPARATE_FILE_FINAL
+function fenixFormApplicantsFileFinal() {
+  const pathLib = require("path");
+  const baseDir = pathLib.dirname(FENIX_DATA_FILE);
+  return pathLib.join(baseDir, "fenix-form-applicants.json");
+}
+
+function fenixGradeDrawFileFinal() {
+  const pathLib = require("path");
+  const baseDir = pathLib.dirname(FENIX_DATA_FILE);
+  return pathLib.join(baseDir, "fenix-grade-draw.json");
+}
+
+function fenixReadFormApplicantsFileFinal() {
+  try {
+    const file = fenixFormApplicantsFileFinal();
+
+    if (!fs.existsSync(file)) return [];
+
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error("Erro lendo inscritos do formulario:", error);
+    return [];
+  }
+}
+
+function fenixSaveFormApplicantsFileFinal(applicants) {
+  const pathLib = require("path");
+  const file = fenixFormApplicantsFileFinal();
+  const list = Array.isArray(applicants) ? applicants : [];
+
+  fs.mkdirSync(pathLib.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(list, null, 2), "utf8");
+
+  return list;
+}
+
+function fenixReadGradeDrawFileFinal() {
+  try {
+    const file = fenixGradeDrawFileFinal();
+
+    if (!fs.existsSync(file)) return null;
+
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (error) {
+    console.error("Erro lendo sorteio da grade:", error);
+    return null;
+  }
+}
+
+function fenixSaveGradeDrawFileFinal(draw) {
+  const pathLib = require("path");
+  const file = fenixGradeDrawFileFinal();
+
+  fs.mkdirSync(pathLib.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(draw || null, null, 2), "utf8");
+
+  return draw;
+}
+
+app.get('/api/fenix/admin/form-applicants', requireFenixAdmin, (req, res) => {
+  const applicants = fenixReadFormApplicantsFileFinal();
+
+  res.json({
+    ok: true,
+    total: applicants.length,
+    applicants: applicants
+      .slice()
+      .sort((a, b) => String(a.nick || '').localeCompare(String(b.nick || '')))
+  });
+});
+
+app.post('/api/fenix/admin/form-applicants/import', requireFenixAdmin, (req, res) => {
+  const pasted = String(req.body?.text || '');
+  const parsed = fenixParseApplicantsFromPaste(pasted);
+
+  if (!parsed.length) {
+    return res.status(400).json({
+      ok: false,
+      message: 'Nenhum inscrito encontrado. Cole a planilha com o cabeçalho.'
+    });
+  }
+
+  const currentList = fenixReadFormApplicantsFileFinal();
+  const current = new Map();
+
+  for (const applicant of currentList) {
+    const key = fenixNormalizeKickNick(applicant.slug || applicant.nick).toLowerCase();
+    if (key) current.set(key, applicant);
+  }
+
+  for (const applicant of parsed) {
+    const key = applicant.slug;
+
+    if (current.has(key)) {
+      const existing = current.get(key);
+      Object.assign(existing, {
+        ...existing,
+        ...applicant,
+        ignored: Boolean(existing.ignored),
+        updatedAt: new Date().toISOString()
+      });
+    } else {
+      currentList.push(applicant);
+      current.set(key, applicant);
+    }
+  }
+
+  const saved = fenixSaveFormApplicantsFileFinal(currentList);
+
+  res.json({
+    ok: true,
+    imported: parsed.length,
+    total: saved.length,
+    applicants: saved
+  });
+});
+
+app.post('/api/fenix/admin/grade-draw/generate', requireFenixAdmin, (req, res) => {
+  const applicants = fenixReadFormApplicantsFileFinal();
+
+  const vacancyPerDay = Number(req.body?.vacancyPerDay || 0);
+  const draw = fenixGenerateGradeDraw(applicants, { vacancyPerDay });
+
+  fenixSaveGradeDrawFileFinal(draw);
+
+  res.json({
+    ok: true,
+    draw
+  });
+});
+
+app.get('/api/fenix/admin/grade-draw', requireFenixAdmin, (req, res) => {
+  res.json({
+    ok: true,
+    draw: fenixReadGradeDrawFileFinal()
+  });
+});
+
+
 app.get('/api/fenix/admin/form-applicants', requireFenixAdmin, (req, res) => {
   const data = readFenixData();
 
