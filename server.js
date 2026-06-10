@@ -2662,7 +2662,50 @@ function fenixRenderGradeSorteioSimplesPage({ applicants = [], draw = null, mess
   </section>
 
   <section>
-    <h2>5. Grade sorteada</h2>
+    <h2>5. Aplicar sorteio na grade real</h2>
+    <div class="muted">
+      Só clique aqui quando o resumo estiver correto. VAGO e PREENCHER MANUAL entram vazios na grade real.
+    </div>
+
+    <form method="POST" action="/admin/grade-sorteio-simples/aplicar">
+      <label>Senha Admin:</label>
+      <input name="adminSecret" type="password" placeholder="Digite a senha admin da Railway" required>
+      <br><br>
+
+      <label>Semana de destino:</label>
+      <select name="weekMode">
+        <option value="next">Próxima semana</option>
+        <option value="current">Semana atual</option>
+        <option value="manual">Escolher data manual</option>
+      </select>
+      <br><br>
+
+      <label>Data manual de início:</label>
+      <input name="manualStartDate" type="date">
+      <div class="muted">Use apenas se escolher "Escolher data manual". O ideal é escolher uma segunda-feira.</div>
+      <br><br>
+
+      <label>Aplicar:</label>
+      <select name="applyScope">
+        <option value="semana">Semana toda</option>
+        <option value="segunda">Apenas Segunda</option>
+        <option value="terca">Apenas Terça</option>
+        <option value="quarta">Apenas Quarta</option>
+        <option value="quinta">Apenas Quinta</option>
+        <option value="sexta">Apenas Sexta</option>
+        <option value="sabado">Apenas Sábado</option>
+      </select>
+      <br><br>
+
+      <label>Confirmação:</label>
+      <input name="confirmText" placeholder="Digite APLICAR para confirmar" required>
+
+      <button type="submit">Aplicar essa grade no app</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>6. Grade sorteada</h2>
     <div class="muted">Rascunho. Ainda não altera a grade ativa do app.</div>
     <table>
       <thead>
@@ -3221,6 +3264,187 @@ function fenixDrawVisualSummaryFinal(draw) {
     totalScreens: filled + reservedVacant + manualFill
   };
 }
+
+// FENIX_APLICAR_SORTEIO_GRADE_REAL_FINAL
+function fenixDateOnlyFinal(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
+}
+
+function fenixMondayOfWeekFinal(baseDate = new Date()) {
+  const date = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), 12, 0, 0);
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  return date;
+}
+
+function fenixAddDaysFinal(date, amount) {
+  const next = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function fenixWeekStartFromApplyModeFinal(mode, manualStartDate) {
+  const selected = String(mode || 'next').toLowerCase();
+
+  if (selected === 'manual' && /^\d{4}-\d{2}-\d{2}$/.test(String(manualStartDate || ''))) {
+    return new Date(String(manualStartDate) + 'T12:00:00');
+  }
+
+  const currentMonday = fenixMondayOfWeekFinal(new Date());
+
+  if (selected === 'current') {
+    return currentMonday;
+  }
+
+  return fenixAddDaysFinal(currentMonday, 7);
+}
+
+function fenixDayOffsetFromKeyFinal(dayKey) {
+  const map = {
+    segunda: 0,
+    terca: 1,
+    quarta: 2,
+    quinta: 3,
+    sexta: 4,
+    sabado: 5
+  };
+
+  return Object.prototype.hasOwnProperty.call(map, dayKey) ? map[dayKey] : null;
+}
+
+function fenixScreenToScheduleFinal(screen) {
+  if (!screen || screen.status !== 'OK' || !screen.nick) {
+    return {
+      name: '',
+      url: '',
+      maintenance: true
+    };
+  }
+
+  const nick = String(screen.nick || '').trim();
+
+  return {
+    name: nick,
+    url: fenixKickUrlFromNick(nick),
+    maintenance: false
+  };
+}
+
+function fenixApplyDrawToRealScheduleFinal(draw, options = {}) {
+  if (!draw || !Array.isArray(draw.rows) || !draw.rows.length) {
+    throw new Error('Nenhum sorteio encontrado para aplicar.');
+  }
+
+  const confirmText = String(options.confirmText || '').trim().toUpperCase();
+
+  if (confirmText !== 'APLICAR') {
+    throw new Error('Digite APLICAR para confirmar.');
+  }
+
+  const applyScope = String(options.applyScope || 'semana').toLowerCase();
+  const weekStart = fenixWeekStartFromApplyModeFinal(options.weekMode, options.manualStartDate);
+  const data = readFenixData();
+
+  data.schedule = Array.isArray(data.schedule) ? data.schedule : [];
+
+  let saved = 0;
+  const affectedDates = new Set();
+
+  const rowsToApply = draw.rows.filter((row) => {
+    if (!row || !row.day) return false;
+    if (applyScope === 'semana') return true;
+    return String(row.day).toLowerCase() === applyScope;
+  });
+
+  for (const row of rowsToApply) {
+    const offset = fenixDayOffsetFromKeyFinal(row.day);
+    if (offset === null) continue;
+
+    const slotDate = fenixDateOnlyFinal(fenixAddDaysFinal(weekStart, offset));
+    const slotHour = String(row.hourLabel || '').trim();
+
+    if (!/^\d{2}:00$/.test(slotHour)) continue;
+
+    affectedDates.add(slotDate);
+
+    let slot = data.schedule.find((item) => item.slotDate === slotDate && item.slotHour === slotHour);
+
+    if (!slot) {
+      slot = {
+        id: crypto.randomUUID(),
+        slotDate,
+        slotHour,
+        active: true,
+        createdAt: new Date().toISOString()
+      };
+
+      data.schedule.push(slot);
+    }
+
+    const screens = Array.isArray(row.screens) ? row.screens : [];
+    const s1 = fenixScreenToScheduleFinal(screens[0]);
+    const s2 = fenixScreenToScheduleFinal(screens[1]);
+    const s3 = fenixScreenToScheduleFinal(screens[2]);
+
+    slot.screen1Name = s1.name;
+    slot.screen1Url = s1.url;
+    slot.screen1Maintenance = s1.maintenance;
+
+    slot.screen2Name = s2.name;
+    slot.screen2Url = s2.url;
+    slot.screen2Maintenance = s2.maintenance;
+
+    slot.screen3Name = s3.name;
+    slot.screen3Url = s3.url;
+    slot.screen3Maintenance = s3.maintenance;
+
+    slot.active = true;
+    slot.updatedAt = new Date().toISOString();
+    slot.source = 'grade-sorteio';
+    slot.drawId = draw.id || '';
+
+    saved += 1;
+  }
+
+  writeFenixData(data);
+
+  return {
+    saved,
+    weekStart: fenixDateOnlyFinal(weekStart),
+    affectedDates: Array.from(affectedDates).sort(),
+    applyScope
+  };
+}
+
+app.post('/admin/grade-sorteio-simples/aplicar', fenixSimpleAdminAuth, (req, res) => {
+  try {
+    const applicants = fenixReadFormApplicantsFileFinal();
+    const draw = fenixReadGradeDrawFileFinal();
+
+    const result = fenixApplyDrawToRealScheduleFinal(draw, {
+      weekMode: req.body?.weekMode || 'next',
+      manualStartDate: req.body?.manualStartDate || '',
+      applyScope: req.body?.applyScope || 'semana',
+      confirmText: req.body?.confirmText || ''
+    });
+
+    return res.type('html').send(fenixRenderGradeSorteioSimplesPage({
+      applicants,
+      draw,
+      message: 'Grade aplicada no app. Horários salvos: ' + result.saved + ' | Início: ' + result.weekStart + ' | Escopo: ' + result.applyScope
+    }));
+  } catch (error) {
+    return res.type('html').send(fenixRenderGradeSorteioSimplesPage({
+      applicants: fenixReadFormApplicantsFileFinal(),
+      draw: fenixReadGradeDrawFileFinal(),
+      message: 'Erro ao aplicar: ' + String(error.message || error)
+    }));
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
