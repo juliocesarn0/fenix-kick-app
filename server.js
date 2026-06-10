@@ -2441,6 +2441,250 @@ app.get('/api/fenix/admin/grade-draw', requireFenixAdmin, (req, res) => {
   });
 });
 
+// FENIX_GRADE_SORTEIO_SIMPLES_FINAL
+function fenixHtmlEscape(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function fenixAvailabilityTextSimple(availability) {
+  const days = [
+    ['segunda', 'Seg'],
+    ['terca', 'Ter'],
+    ['quarta', 'Qua'],
+    ['quinta', 'Qui'],
+    ['sexta', 'Sex'],
+    ['sabado', 'Sáb']
+  ];
+
+  return days.map(([key, label]) => {
+    const hours = Array.isArray(availability?.[key]) ? availability[key] : [];
+    if (!hours.length) return '';
+    return label + ': ' + hours.map((h) => String(h).padStart(2, '0') + 'h').join(', ');
+  }).filter(Boolean).join(' | ');
+}
+
+function fenixRenderGradeSorteioSimplesPage({ applicants = [], draw = null, message = '' } = {}) {
+  const applicantRows = applicants.map((item) => {
+    return `
+      <tr>
+        <td>${fenixHtmlEscape(item.name)}</td>
+        <td><b>${fenixHtmlEscape(item.nick)}</b></td>
+        <td>${fenixHtmlEscape(item.whatsapp)}</td>
+        <td>${fenixHtmlEscape(fenixAvailabilityTextSimple(item.availability))}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const drawRows = draw && Array.isArray(draw.rows) ? draw.rows.map((row) => {
+    const screens = row.screens || [];
+
+    function screen(index) {
+      const s = screens[index] || {};
+      if (s.status === 'OK') return '<span class="ok">' + fenixHtmlEscape(s.nick) + '</span>';
+      if (s.status === 'VAGO') return '<span class="vago">VAGO</span>';
+      return '<span class="bad">SEM CANDIDATO</span>';
+    }
+
+    return `
+      <tr>
+        <td>${fenixHtmlEscape(row.dayLabel)}</td>
+        <td>${fenixHtmlEscape(row.hourLabel)}</td>
+        <td>${screen(0)}</td>
+        <td>${screen(1)}</td>
+        <td>${screen(2)}</td>
+      </tr>
+    `;
+  }).join('') : '';
+
+  return `
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Fenix Lurk - Sorteio Simples</title>
+  <style>
+    body { margin:0; background:#090909; color:#fff; font-family:Arial,sans-serif; }
+    header { padding:24px; background:linear-gradient(135deg,#080808,#1b1304); border-bottom:1px solid #3a2a08; }
+    h1 { margin:0; color:#f3c451; }
+    main { padding:18px; display:grid; gap:16px; }
+    section { background:#111; border:1px solid #30240a; border-radius:14px; padding:16px; }
+    input, textarea { width:100%; box-sizing:border-box; background:#050505; color:#fff; border:1px solid #49370e; border-radius:10px; padding:10px; }
+    textarea { min-height:170px; }
+    button { background:#d6a82d; color:#090909; border:0; border-radius:10px; padding:11px 15px; font-weight:900; cursor:pointer; margin-top:10px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; margin-top:12px; }
+    th,td { border-bottom:1px solid #252525; padding:8px; vertical-align:top; text-align:left; }
+    th { color:#f3c451; background:#0b0b0b; }
+    .msg { color:#55ff99; font-weight:900; }
+    .muted { color:#aaa; font-size:12px; }
+    .ok { color:#55ff99; font-weight:900; }
+    .vago { color:#ffcc55; font-weight:900; }
+    .bad { color:#ff7777; font-weight:900; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Fenix Lurk - Sorteio de Grade Simples</h1>
+  <div class="muted">Página sem JavaScript. Aqui os botões funcionam direto pelo backend.</div>
+</header>
+
+<main>
+  ${message ? '<section><div class="msg">' + fenixHtmlEscape(message) + '</div></section>' : ''}
+
+  <section>
+    <h2>1. Importar formulário</h2>
+    <form method="POST" action="/admin/grade-sorteio-simples/importar">
+      <label>Senha Admin:</label>
+      <input name="adminSecret" type="password" placeholder="Digite a senha admin da Railway" required>
+      <br><br>
+      <label>Planilha copiada:</label>
+      <textarea name="text" placeholder="Cole aqui cabeçalho + respostas do Google Forms"></textarea>
+      <button type="submit">Importar inscritos</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>2. Ver inscritos salvos</h2>
+    <form method="POST" action="/admin/grade-sorteio-simples/ver">
+      <label>Senha Admin:</label>
+      <input name="adminSecret" type="password" placeholder="Digite a senha admin da Railway" required>
+      <button type="submit">Ver inscritos</button>
+    </form>
+
+    <h3>Total: ${applicants.length}</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Nick Kick</th>
+          <th>WhatsApp</th>
+          <th>Horários marcados</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${applicantRows || '<tr><td colspan="4">Nenhum inscrito carregado ainda.</td></tr>'}
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>3. Gerar sorteio</h2>
+    <form method="POST" action="/admin/grade-sorteio-simples/gerar">
+      <label>Senha Admin:</label>
+      <input name="adminSecret" type="password" placeholder="Digite a senha admin da Railway" required>
+      <br><br>
+      <label>Horários vagos por dia:</label>
+      <input name="vacancyPerDay" type="number" min="0" max="24" value="3">
+      <button type="submit">Gerar grade por sorteio</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>4. Grade sorteada</h2>
+    <div class="muted">Rascunho. Ainda não altera a grade ativa do app.</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Dia</th>
+          <th>Hora</th>
+          <th>Tela 1</th>
+          <th>Tela 2</th>
+          <th>Tela 3</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${drawRows || '<tr><td colspan="5">Nenhum sorteio carregado ainda.</td></tr>'}
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>
+  `;
+}
+
+function fenixSimpleAdminAuth(req, res, next) {
+  req.headers['x-fenix-admin'] = 'GokuuMods';
+  req.headers['x-fenix-admin-secret'] = String(req.body?.adminSecret || req.query?.adminSecret || '').trim();
+  return requireFenixAdmin(req, res, next);
+}
+
+app.get('/admin/grade-sorteio-simples', (req, res) => {
+  res.type('html').send(fenixRenderGradeSorteioSimplesPage());
+});
+
+app.post('/admin/grade-sorteio-simples/ver', fenixSimpleAdminAuth, (req, res) => {
+  const applicants = fenixReadFormApplicantsFileFinal();
+  const draw = fenixReadGradeDrawFileFinal();
+
+  res.type('html').send(fenixRenderGradeSorteioSimplesPage({
+    applicants,
+    draw,
+    message: 'Inscritos carregados: ' + applicants.length
+  }));
+});
+
+app.post('/admin/grade-sorteio-simples/importar', fenixSimpleAdminAuth, (req, res) => {
+  const pasted = String(req.body?.text || '');
+  const parsed = fenixParseApplicantsFromPaste(pasted);
+
+  if (!parsed.length) {
+    return res.type('html').send(fenixRenderGradeSorteioSimplesPage({
+      message: 'Erro: nenhum inscrito encontrado. Cole a planilha com cabeçalho.'
+    }));
+  }
+
+  const currentList = fenixReadFormApplicantsFileFinal();
+  const current = new Map();
+
+  for (const applicant of currentList) {
+    const key = fenixNormalizeKickNick(applicant.slug || applicant.nick).toLowerCase();
+    if (key) current.set(key, applicant);
+  }
+
+  for (const applicant of parsed) {
+    const key = applicant.slug;
+
+    if (current.has(key)) {
+      const existing = current.get(key);
+      Object.assign(existing, {
+        ...existing,
+        ...applicant,
+        ignored: Boolean(existing.ignored),
+        updatedAt: new Date().toISOString()
+      });
+    } else {
+      currentList.push(applicant);
+      current.set(key, applicant);
+    }
+  }
+
+  const saved = fenixSaveFormApplicantsFileFinal(currentList);
+
+  res.type('html').send(fenixRenderGradeSorteioSimplesPage({
+    applicants: saved,
+    draw: fenixReadGradeDrawFileFinal(),
+    message: 'Importado com sucesso. Total salvo: ' + saved.length
+  }));
+});
+
+app.post('/admin/grade-sorteio-simples/gerar', fenixSimpleAdminAuth, (req, res) => {
+  const applicants = fenixReadFormApplicantsFileFinal();
+  const vacancyPerDay = Number(req.body?.vacancyPerDay || 0);
+  const draw = fenixGenerateGradeDraw(applicants, { vacancyPerDay });
+
+  fenixSaveGradeDrawFileFinal(draw);
+
+  res.type('html').send(fenixRenderGradeSorteioSimplesPage({
+    applicants,
+    draw,
+    message: 'Sorteio gerado. Inscritos: ' + applicants.length + ' | Vagos por dia: ' + vacancyPerDay
+  }));
+});
+
 app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
