@@ -1265,7 +1265,7 @@ app.get('/api/fenix/admin/online-users', requireFenixAdmin, (req, res) => {
       farmStatus = kickConnected ? 'Farm OK' : 'Sem Kick';
     }
 
-    const lastTextBase = hasFastSignal ? lastSeenMinutes : lastCycleMinutes;
+    const lastTextBase = appOnline || appWarning ? lastSeenMinutes : lastCycleMinutes;
     const lastText = lastTextBase === null
       ? 'Nunca'
       : lastTextBase <= 0
@@ -1524,6 +1524,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
