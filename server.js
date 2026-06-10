@@ -2593,8 +2593,30 @@ function fenixRenderGradeSorteioSimplesPage({ applicants = [], draw = null, mess
       <label>Senha Admin:</label>
       <input name="adminSecret" type="password" placeholder="Digite a senha admin da Railway" required>
       <br><br>
-      <label>Horários vagos por dia:</label>
-      <input name="vacancyPerDay" type="number" min="0" max="24" value="3">
+      <label>Quantidade de horários vagos aleatórios por dia:</label>
+      <input name="vacancyPerDay" type="number" min="0" max="24" value="0">
+      <div class="muted">Use 0 se você quiser escolher os horários vagos manualmente.</div>
+      <br><br>
+
+      <label>Horários que você quer deixar VAGO:</label>
+      <input name="manualVacantHours" placeholder="Exemplo: 12, 18, 23">
+      <div class="muted">Digite só as horas. Exemplo: 12, 18, 23. Se preencher aqui, o sistema deixa exatamente esses horários vagos.</div>
+      <br><br>
+
+      <label>Máximo por pessoa na semana:</label>
+      <input name="maxWeekly" type="number" min="1" max="200" value="8">
+      <br><br>
+
+      <label>Máximo por pessoa no dia:</label>
+      <input name="maxDaily" type="number" min="1" max="24" value="2">
+      <br><br>
+
+      <label>Evitar repetir pessoa em horário seguido:</label>
+      <select name="avoidConsecutive">
+        <option value="sim">Sim</option>
+        <option value="nao">Não</option>
+      </select>
+
       <button type="submit">Gerar grade por sorteio</button>
     </form>
   </section>
@@ -2719,15 +2741,21 @@ app.post('/admin/grade-sorteio-simples/importar', fenixSimpleAdminAuth, (req, re
 
 app.post('/admin/grade-sorteio-simples/gerar', fenixSimpleAdminAuth, (req, res) => {
   const applicants = fenixReadFormApplicantsFileFinal();
-  const vacancyPerDay = Number(req.body?.vacancyPerDay || 0);
-  const draw = fenixGenerateGradeDraw(applicants, { vacancyPerDay });
+
+  const draw = fenixGenerateGradeDrawAdminChooseVagosFinal(applicants, {
+    vacancyPerDay: Number(req.body?.vacancyPerDay || 0),
+    manualVacantHours: req.body?.manualVacantHours || "",
+    maxWeekly: Number(req.body?.maxWeekly || 8),
+    maxDaily: Number(req.body?.maxDaily || 2),
+    avoidConsecutive: req.body?.avoidConsecutive || "sim"
+  });
 
   fenixSaveGradeDrawFileFinal(draw);
 
   res.type('html').send(fenixRenderGradeSorteioSimplesPage({
     applicants,
     draw,
-    message: 'Sorteio gerado. Inscritos: ' + applicants.length + ' | Vagos por dia: ' + vacancyPerDay
+    message: 'Sorteio gerado. Inscritos: ' + applicants.length + ' | Vagos: ' + draw.summary.totalVacantHours + ' | Max semana: ' + draw.maxWeekly + ' | Max dia: ' + draw.maxDaily
   }));
 });
 
@@ -2965,6 +2993,167 @@ app.post('/admin/grade-sorteio-melhorado/limpar-inscritos', (req, res, next) => 
     message: 'Todos os inscritos foram apagados. Agora importe a planilha completa novamente.'
   }));
 });
+
+// FENIX_SIMPLE_DRAW_ADMIN_CHOOSE_VAGOS_FINAL
+function fenixGenerateGradeDrawAdminChooseVagosFinal(applicants, options = {}) {
+  const screensPerHour = 3;
+  const vacancyPerDay = Math.max(0, Math.min(24, Number(options.vacancyPerDay || 0)));
+  const manualVacantHours = fenixParseManualVacantHoursFinal(options.manualVacantHours || "");
+  const maxWeekly = Math.max(1, Number(options.maxWeekly || 8));
+  const maxDaily = Math.max(1, Number(options.maxDaily || 2));
+  const avoidConsecutive = String(options.avoidConsecutive || "sim").toLowerCase() !== "nao";
+
+  const usage = {};
+  const usageByDay = {};
+  const lastHourByDay = {};
+  const rows = [];
+
+  const activeApplicants = applicants
+    .filter((item) => item && !item.ignored && item.nick)
+    .map((item) => ({
+      ...item,
+      slug: fenixNormalizeKickNick(item.slug || item.nick).toLowerCase(),
+      url: item.url || fenixKickUrlFromNick(item.nick)
+    }));
+
+  for (const applicant of activeApplicants) {
+    usage[applicant.slug] = 0;
+    usageByDay[applicant.slug] = {};
+  }
+
+  for (const dayKey of FENIX_DRAW_DAYS) {
+    const randomVacants = manualVacantHours.length ? new Set() : fenixPickVacantHours(vacancyPerDay);
+    const manualVacants = new Set(manualVacantHours);
+
+    lastHourByDay[dayKey] = new Set();
+
+    for (let hour = 0; hour < 24; hour += 1) {
+      const isVacant = manualVacants.has(hour) || randomVacants.has(hour);
+
+      const row = {
+        id: dayKey + "-" + String(hour).padStart(2, "0"),
+        day: dayKey,
+        dayLabel: (FENIX_FORM_DAYS.find((day) => day.key === dayKey) || {}).label || dayKey,
+        hour,
+        hourLabel: fenixFormatHour(hour),
+        manualVacancy: isVacant,
+        screens: []
+      };
+
+      if (isVacant) {
+        for (let screen = 1; screen <= screensPerHour; screen += 1) {
+          row.screens.push({
+            screen,
+            status: "VAGO",
+            nick: "",
+            url: ""
+          });
+        }
+
+        rows.push(row);
+        lastHourByDay[dayKey] = new Set();
+        continue;
+      }
+
+      const picked = new Set();
+
+      for (let screen = 1; screen <= screensPerHour; screen += 1) {
+        let candidates = activeApplicants.filter((applicant) => {
+          const available = Array.isArray(applicant.availability?.[dayKey])
+            ? applicant.availability[dayKey]
+            : [];
+
+          const weekCount = usage[applicant.slug] || 0;
+          const dayCount = usageByDay[applicant.slug]?.[dayKey] || 0;
+
+          return available.includes(hour)
+            && !picked.has(applicant.slug)
+            && weekCount < maxWeekly
+            && dayCount < maxDaily;
+        });
+
+        if (avoidConsecutive) {
+          const notLastHour = candidates.filter((applicant) => {
+            return !lastHourByDay[dayKey]?.has(applicant.slug);
+          });
+
+          if (notLastHour.length > 0) {
+            candidates = notLastHour;
+          }
+        }
+
+        candidates.sort((a, b) => {
+          const aUsage = usage[a.slug] || 0;
+          const bUsage = usage[b.slug] || 0;
+
+          if (aUsage !== bUsage) return aUsage - bUsage;
+
+          const aDay = usageByDay[a.slug]?.[dayKey] || 0;
+          const bDay = usageByDay[b.slug]?.[dayKey] || 0;
+
+          if (aDay !== bDay) return aDay - bDay;
+
+          return Math.random() - 0.5;
+        });
+
+        const selected = candidates[0];
+
+        if (!selected) {
+          row.screens.push({
+            screen,
+            status: "VAGO_MANUAL",
+            nick: "",
+            url: ""
+          });
+          continue;
+        }
+
+        picked.add(selected.slug);
+        usage[selected.slug] = (usage[selected.slug] || 0) + 1;
+        usageByDay[selected.slug][dayKey] = (usageByDay[selected.slug][dayKey] || 0) + 1;
+
+        row.screens.push({
+          screen,
+          status: "OK",
+          name: selected.name,
+          nick: selected.nick,
+          slug: selected.slug,
+          url: selected.url,
+          whatsapp: selected.whatsapp
+        });
+      }
+
+      rows.push(row);
+      lastHourByDay[dayKey] = new Set(row.screens.filter((s) => s.status === "OK").map((s) => s.slug));
+    }
+  }
+
+  const zeroApplicants = activeApplicants
+    .filter((applicant) => (usage[applicant.slug] || 0) === 0)
+    .map((applicant) => applicant.slug);
+
+  return {
+    id: "draw-" + Date.now(),
+    createdAt: new Date().toISOString(),
+    vacancyPerDay,
+    manualVacantHours,
+    maxWeekly,
+    maxDaily,
+    avoidConsecutive,
+    screensPerHour,
+    rows,
+    summary: {
+      applicants: activeApplicants.length,
+      totalRows: rows.length,
+      totalVacantHours: rows.filter((row) => row.manualVacancy).length,
+      totalOpenScreens: rows.reduce((sum, row) => {
+        return sum + row.screens.filter((screen) => screen.status !== "OK").length;
+      }, 0),
+      zeroApplicants,
+      usage
+    }
+  };
+}
 
 app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
