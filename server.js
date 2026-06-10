@@ -2094,7 +2094,7 @@ app.get('/admin/grade-sorteio', (req, res) => {
         const s = screens[index] || {};
         if (s.status === "OK") return "<span class='ok'>" + s.nick + "</span>";
         if (s.status === "VAGO") return "<span class='vago'>VAGO</span>";
-        return "<span class='bad'>VAGO MANUAL</span>";
+        return "<span class='bad'>PREENCHER MANUAL</span>";
       }
 
       const action = row.manualVacancy
@@ -2490,7 +2490,7 @@ function fenixRenderGradeSorteioSimplesPage({ applicants = [], draw = null, mess
       const s = screens[index] || {};
       if (s.status === 'OK') return '<span class="ok">' + fenixHtmlEscape(s.nick) + '</span>';
       if (s.status === 'VAGO') return '<span class="vago">VAGO</span>';
-      return '<span class="bad">VAGO MANUAL</span>';
+      return '<span class="bad">PREENCHER MANUAL</span>';
     }
 
     return `
