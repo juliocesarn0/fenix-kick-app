@@ -2718,6 +2718,493 @@ app.post('/admin/grade-sorteio-simples/gerar', fenixSimpleAdminAuth, (req, res) 
   }));
 });
 
+// FENIX_GRADE_SORTEIO_MELHORIAS_FINAL
+function fenixParseManualVacantHoursFinal(value) {
+  const text = String(value || '').trim();
+
+  if (!text) return [];
+
+  return Array.from(new Set(
+    text
+      .split(/[,. ;\n\r\t]+/g)
+      .map((item) => item.replace(/h/gi, '').replace(':00', '').trim())
+      .filter(Boolean)
+      .map((item) => Number(item))
+      .filter((hour) => Number.isInteger(hour) && hour >= 0 && hour <= 23)
+  )).sort((a, b) => a - b);
+}
+
+function fenixDrawDaysFromOptionFinal(dayOption) {
+  const option = String(dayOption || 'semana').toLowerCase();
+
+  if (FENIX_DRAW_DAYS.includes(option)) {
+    return [option];
+  }
+
+  return FENIX_DRAW_DAYS.slice();
+}
+
+function fenixGenerateGradeDrawImprovedFinal(applicants, options = {}) {
+  const screensPerHour = 3;
+  const dayOption = String(options.dayOption || 'semana').toLowerCase();
+  const daysToDraw = fenixDrawDaysFromOptionFinal(dayOption);
+  const vacancyPerDay = Math.max(0, Math.min(24, Number(options.vacancyPerDay || 0)));
+  const manualVacantHours = fenixParseManualVacantHoursFinal(options.manualVacantHours);
+
+  const usage = {};
+  const usageByDay = {};
+  const lastHourByDay = {};
+  const rows = [];
+
+  const activeApplicants = applicants
+    .filter((item) => item && !item.ignored && item.nick)
+    .map((item) => ({
+      ...item,
+      slug: fenixNormalizeKickNick(item.slug || item.nick).toLowerCase(),
+      url: item.url || fenixKickUrlFromNick(item.nick)
+    }));
+
+  for (const applicant of activeApplicants) {
+    usage[applicant.slug] = 0;
+    usageByDay[applicant.slug] = {};
+  }
+
+  for (const dayKey of daysToDraw) {
+    const randomVacants = manualVacantHours.length ? new Set() : fenixPickVacantHours(vacancyPerDay);
+    const manualVacants = new Set(manualVacantHours);
+
+    lastHourByDay[dayKey] = new Set();
+
+    for (let hour = 0; hour < 24; hour += 1) {
+      const isVacant = manualVacants.has(hour) || randomVacants.has(hour);
+
+      const row = {
+        id: dayKey + '-' + String(hour).padStart(2, '0'),
+        day: dayKey,
+        dayLabel: (FENIX_FORM_DAYS.find((day) => day.key === dayKey) || {}).label || dayKey,
+        hour,
+        hourLabel: fenixFormatHour(hour),
+        manualVacancy: isVacant,
+        screens: []
+      };
+
+      if (isVacant) {
+        for (let screen = 1; screen <= screensPerHour; screen += 1) {
+          row.screens.push({
+            screen,
+            status: 'VAGO',
+            nick: '',
+            url: ''
+          });
+        }
+
+        rows.push(row);
+        lastHourByDay[dayKey] = new Set();
+        continue;
+      }
+
+      const picked = new Set();
+
+      for (let screen = 1; screen <= screensPerHour; screen += 1) {
+        const candidates = activeApplicants.filter((applicant) => {
+          const available = Array.isArray(applicant.availability?.[dayKey])
+            ? applicant.availability[dayKey]
+            : [];
+
+          return available.includes(hour) && !picked.has(applicant.slug);
+        });
+
+        candidates.sort((a, b) => {
+          const aUsage = usage[a.slug] || 0;
+          const bUsage = usage[b.slug] || 0;
+
+          if (aUsage !== bUsage) return aUsage - bUsage;
+
+          const aDay = usageByDay[a.slug]?.[dayKey] || 0;
+          const bDay = usageByDay[b.slug]?.[dayKey] || 0;
+
+          if (aDay !== bDay) return aDay - bDay;
+
+          const aWasLastHour = lastHourByDay[dayKey]?.has(a.slug) ? 1 : 0;
+          const bWasLastHour = lastHourByDay[dayKey]?.has(b.slug) ? 1 : 0;
+
+          if (aWasLastHour !== bWasLastHour) return aWasLastHour - bWasLastHour;
+
+          return Math.random() - 0.5;
+        });
+
+        const selected = candidates[0];
+
+        if (!selected) {
+          row.screens.push({
+            screen,
+            status: 'SEM_CANDIDATO',
+            nick: '',
+            url: ''
+          });
+          continue;
+        }
+
+        picked.add(selected.slug);
+        usage[selected.slug] = (usage[selected.slug] || 0) + 1;
+        usageByDay[selected.slug][dayKey] = (usageByDay[selected.slug][dayKey] || 0) + 1;
+
+        row.screens.push({
+          screen,
+          status: 'OK',
+          name: selected.name,
+          nick: selected.nick,
+          slug: selected.slug,
+          url: selected.url,
+          whatsapp: selected.whatsapp
+        });
+      }
+
+      rows.push(row);
+      lastHourByDay[dayKey] = new Set(row.screens.filter((s) => s.status === 'OK').map((s) => s.slug));
+    }
+  }
+
+  return {
+    id: 'draw-' + Date.now(),
+    createdAt: new Date().toISOString(),
+    dayOption,
+    daysToDraw,
+    vacancyPerDay,
+    manualVacantHours,
+    screensPerHour,
+    rows,
+    summary: {
+      applicants: activeApplicants.length,
+      totalRows: rows.length,
+      totalVacantHours: rows.filter((row) => row.manualVacancy).length,
+      totalOpenScreens: rows.reduce((sum, row) => {
+        return sum + row.screens.filter((screen) => screen.status !== 'OK').length;
+      }, 0),
+      usage
+    }
+  };
+}
+
+function fenixBuildVacancyMessagesFinal(draw) {
+  if (!draw || !Array.isArray(draw.rows)) return [];
+
+  return draw.rows
+    .filter((row) => row.manualVacancy)
+    .map((row) => {
+      return [
+        '🔥 VAGA ABERTA NA GRADE FENIX 🔥',
+        '',
+        'Dia: ' + row.dayLabel,
+        'Horário: ' + row.hourLabel,
+        'Vagas: 3 telas disponíveis',
+        '',
+        'Quem estiver em live nesse horário, marca ✅ aqui no grupo.'
+      ].join('\n');
+    });
+}
+
+function fenixRenderGradeSorteioMelhoradoPage({ applicants = [], draw = null, message = '' } = {}) {
+  const applicantRows = applicants.map((item) => {
+    return `
+      <tr>
+        <td>${fenixHtmlEscape(item.name)}</td>
+        <td><b>${fenixHtmlEscape(item.nick)}</b></td>
+        <td>${fenixHtmlEscape(item.whatsapp)}</td>
+        <td>${fenixHtmlEscape(fenixAvailabilityTextSimple(item.availability))}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const rowsByDay = {};
+
+  if (draw && Array.isArray(draw.rows)) {
+    for (const row of draw.rows) {
+      rowsByDay[row.dayLabel] = rowsByDay[row.dayLabel] || [];
+      rowsByDay[row.dayLabel].push(row);
+    }
+  }
+
+  const drawTables = Object.keys(rowsByDay).map((dayLabel) => {
+    const rowsHtml = rowsByDay[dayLabel].map((row) => {
+      const screens = row.screens || [];
+
+      function screen(index) {
+        const s = screens[index] || {};
+        if (s.status === 'OK') return '<span class="ok">' + fenixHtmlEscape(s.nick) + '</span>';
+        if (s.status === 'VAGO') return '<span class="vago">VAGO</span>';
+        return '<span class="bad">SEM CANDIDATO</span>';
+      }
+
+      return `
+        <tr>
+          <td>${fenixHtmlEscape(row.hourLabel)}</td>
+          <td>${screen(0)}</td>
+          <td>${screen(1)}</td>
+          <td>${screen(2)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <h3 class="dayTitle">${fenixHtmlEscape(dayLabel)}</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Hora</th>
+            <th>Tela 1</th>
+            <th>Tela 2</th>
+            <th>Tela 3</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    `;
+  }).join('');
+
+  const vacancyMessages = fenixBuildVacancyMessagesFinal(draw);
+  const vacancyText = vacancyMessages.join('\n\n------------------------------\n\n');
+
+  const usageRows = draw && draw.summary && draw.summary.usage
+    ? Object.entries(draw.summary.usage)
+      .sort((a, b) => b[1] - a[1])
+      .map(([nick, count]) => `<tr><td>${fenixHtmlEscape(nick)}</td><td>${count}</td></tr>`)
+      .join('')
+    : '';
+
+  return `
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Fenix Lurk - Sorteio Melhorado</title>
+  <style>
+    body { margin:0; background:#090909; color:#fff; font-family:Arial,sans-serif; }
+    header { padding:24px; background:linear-gradient(135deg,#080808,#1b1304); border-bottom:1px solid #3a2a08; }
+    h1 { margin:0; color:#f3c451; }
+    main { padding:18px; display:grid; gap:16px; }
+    section { background:#111; border:1px solid #30240a; border-radius:14px; padding:16px; }
+    input, textarea, select { width:100%; box-sizing:border-box; background:#050505; color:#fff; border:1px solid #49370e; border-radius:10px; padding:10px; }
+    textarea { min-height:150px; }
+    button { background:#d6a82d; color:#090909; border:0; border-radius:10px; padding:11px 15px; font-weight:900; cursor:pointer; margin-top:10px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; margin-top:12px; }
+    th,td { border-bottom:1px solid #252525; padding:8px; vertical-align:top; text-align:left; }
+    th { color:#f3c451; background:#0b0b0b; }
+    .msg { color:#55ff99; font-weight:900; }
+    .muted { color:#aaa; font-size:12px; }
+    .ok { color:#55ff99; font-weight:900; }
+    .vago { color:#ffcc55; font-weight:900; }
+    .bad { color:#ff7777; font-weight:900; }
+    .dayTitle { color:#f3c451; margin-top:24px; border-top:1px solid #3a2a08; padding-top:14px; }
+    .two { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+    @media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Fenix Lurk - Sorteio de Grade Melhorado</h1>
+  <div class="muted">Rascunho seguro. Ainda não altera a grade ativa do app.</div>
+</header>
+
+<main>
+  ${message ? '<section><div class="msg">' + fenixHtmlEscape(message) + '</div></section>' : ''}
+
+  <section>
+    <h2>1. Importar formulário</h2>
+    <form method="POST" action="/admin/grade-sorteio-melhorado/importar">
+      <label>Senha Admin:</label>
+      <input name="adminSecret" type="password" placeholder="Digite a senha admin da Railway" required>
+      <br><br>
+      <label>Planilha copiada:</label>
+      <textarea name="text" placeholder="Cole aqui cabeçalho + respostas do Google Forms"></textarea>
+      <button type="submit">Importar inscritos</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>2. Inscritos salvos</h2>
+    <form method="POST" action="/admin/grade-sorteio-melhorado/ver">
+      <label>Senha Admin:</label>
+      <input name="adminSecret" type="password" placeholder="Digite a senha admin da Railway" required>
+      <button type="submit">Ver inscritos</button>
+    </form>
+
+    <h3>Total: ${applicants.length}</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Nick Kick</th>
+          <th>WhatsApp</th>
+          <th>Horários marcados</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${applicantRows || '<tr><td colspan="4">Nenhum inscrito carregado ainda.</td></tr>'}
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>3. Gerar sorteio</h2>
+    <form method="POST" action="/admin/grade-sorteio-melhorado/gerar">
+      <label>Senha Admin:</label>
+      <input name="adminSecret" type="password" placeholder="Digite a senha admin da Railway" required>
+      <br><br>
+
+      <div class="two">
+        <div>
+          <label>Gerar:</label>
+          <select name="dayOption">
+            <option value="semana">Semana toda</option>
+            <option value="segunda">Só Segunda</option>
+            <option value="terca">Só Terça</option>
+            <option value="quarta">Só Quarta</option>
+            <option value="quinta">Só Quinta</option>
+            <option value="sexta">Só Sexta</option>
+            <option value="sabado">Só Sábado</option>
+          </select>
+        </div>
+
+        <div>
+          <label>Horários vagos por dia aleatórios:</label>
+          <input name="vacancyPerDay" type="number" min="0" max="24" value="3">
+        </div>
+      </div>
+
+      <br>
+      <label>Ou escolha os horários vagos manualmente:</label>
+      <input name="manualVacantHours" placeholder="Exemplo: 05, 21, 22">
+
+      <div class="muted">
+        Se preencher manualmente, ele ignora os vagos aleatórios e deixa vagos exatamente esses horários.
+      </div>
+
+      <button type="submit">Gerar novo sorteio</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>4. Resumo de distribuição</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Nick</th>
+          <th>Quantidade sorteada</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${usageRows || '<tr><td colspan="2">Nenhum sorteio gerado ainda.</td></tr>'}
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>5. Mensagens das vagas abertas</h2>
+    <div class="muted">Copie e cole no grupo quando quiser preencher manualmente.</div>
+    <textarea readonly>${fenixHtmlEscape(vacancyText || 'Nenhuma vaga aberta gerada ainda.')}</textarea>
+  </section>
+
+  <section>
+    <h2>6. Grade sorteada</h2>
+    <div class="muted">Rascunho. Ainda não altera a grade ativa do app.</div>
+    ${drawTables || '<p>Nenhum sorteio carregado ainda.</p>'}
+  </section>
+</main>
+</body>
+</html>
+  `;
+}
+
+function fenixMelhoradoAdminAuth(req, res, next) {
+  req.headers['x-fenix-admin'] = 'GokuuMods';
+  req.headers['x-fenix-admin-secret'] = String(req.body?.adminSecret || req.query?.adminSecret || '').trim();
+  return requireFenixAdmin(req, res, next);
+}
+
+app.get('/admin/grade-sorteio-melhorado', (req, res) => {
+  res.type('html').send(fenixRenderGradeSorteioMelhoradoPage());
+});
+
+app.post('/admin/grade-sorteio-melhorado/ver', fenixMelhoradoAdminAuth, (req, res) => {
+  const applicants = fenixReadFormApplicantsFileFinal();
+  const draw = fenixReadGradeDrawFileFinal();
+
+  res.type('html').send(fenixRenderGradeSorteioMelhoradoPage({
+    applicants,
+    draw,
+    message: 'Inscritos carregados: ' + applicants.length
+  }));
+});
+
+app.post('/admin/grade-sorteio-melhorado/importar', fenixMelhoradoAdminAuth, (req, res) => {
+  try {
+    const pasted = String(req.body?.text || '');
+    const parsed = fenixParseApplicantsFromPaste(pasted);
+
+    if (!parsed.length) {
+      return res.type('html').send(fenixRenderGradeSorteioMelhoradoPage({
+        message: 'Erro: nenhum inscrito encontrado. Cole a planilha com cabeçalho.'
+      }));
+    }
+
+    const currentList = fenixReadFormApplicantsFileFinal();
+    const current = new Map();
+
+    for (const applicant of currentList) {
+      const key = fenixNormalizeKickNick(applicant.slug || applicant.nick).toLowerCase();
+      if (key) current.set(key, applicant);
+    }
+
+    for (const applicant of parsed) {
+      const key = applicant.slug;
+
+      if (current.has(key)) {
+        const existing = current.get(key);
+        Object.assign(existing, {
+          ...existing,
+          ...applicant,
+          ignored: Boolean(existing.ignored),
+          updatedAt: new Date().toISOString()
+        });
+      } else {
+        currentList.push(applicant);
+        current.set(key, applicant);
+      }
+    }
+
+    const saved = fenixSaveFormApplicantsFileFinal(currentList);
+
+    res.type('html').send(fenixRenderGradeSorteioMelhoradoPage({
+      applicants: saved,
+      draw: fenixReadGradeDrawFileFinal(),
+      message: 'Importado com sucesso. Total salvo: ' + saved.length
+    }));
+  } catch (error) {
+    res.type('html').send(fenixRenderGradeSorteioMelhoradoPage({
+      message: 'Erro ao importar: ' + String(error.message || error)
+    }));
+  }
+});
+
+app.post('/admin/grade-sorteio-melhorado/gerar', fenixMelhoradoAdminAuth, (req, res) => {
+  const applicants = fenixReadFormApplicantsFileFinal();
+
+  const draw = fenixGenerateGradeDrawImprovedFinal(applicants, {
+    dayOption: req.body?.dayOption || 'semana',
+    vacancyPerDay: Number(req.body?.vacancyPerDay || 0),
+    manualVacantHours: req.body?.manualVacantHours || ''
+  });
+
+  fenixSaveGradeDrawFileFinal(draw);
+
+  res.type('html').send(fenixRenderGradeSorteioMelhoradoPage({
+    applicants,
+    draw,
+    message: 'Sorteio gerado. Inscritos: ' + applicants.length + ' | Vagos: ' + draw.summary.totalVacantHours
+  }));
+});
+
 app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
