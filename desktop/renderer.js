@@ -1961,8 +1961,44 @@ document.addEventListener("DOMContentLoaded", () => {
   setInterval(fenixEnsureResetExitButtonFinal, 3000);
 });
 
-
 /* FENIX_APP_FAST_HEARTBEAT_RENDERER_FINAL */
+let fenixHeartbeatTimer = null;
+let fenixLastHeartbeatStatus = "Aguardando...";
+
+function ensureFenixHeartbeatStatusBox() {
+  try {
+    let box = document.getElementById("fenixHeartbeatStatusBox");
+
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "fenixHeartbeatStatusBox";
+      box.style.position = "fixed";
+      box.style.left = "18px";
+      box.style.bottom = "14px";
+      box.style.zIndex = "999999";
+      box.style.padding = "8px 12px";
+      box.style.border = "1px solid rgba(255, 200, 80, 0.35)";
+      box.style.borderRadius = "12px";
+      box.style.background = "rgba(0, 0, 0, 0.78)";
+      box.style.color = "#f6d36b";
+      box.style.fontFamily = "Arial, sans-serif";
+      box.style.fontSize = "12px";
+      box.style.fontWeight = "700";
+      box.style.boxShadow = "0 0 18px rgba(0,0,0,0.45)";
+      box.style.display = "none";
+      box.textContent = "Sinal Admin: Aguardando...";
+      document.body.appendChild(box);
+    }
+
+    box.textContent = "Sinal Admin: " + fenixLastHeartbeatStatus;
+  } catch {}
+}
+
+function setFenixHeartbeatStatus(text) {
+  fenixLastHeartbeatStatus = text;
+  ensureFenixHeartbeatStatusBox();
+}
+
 function getFenixHeartbeatSessionId() {
   try {
     if (fenixSession && fenixSession.sessionId) {
@@ -1971,73 +2007,152 @@ function getFenixHeartbeatSessionId() {
   } catch {}
 
   try {
-    const directKeys = [
-      "fenixSession",
-      "fenix_session",
-      "fenixUser",
-      "fenix_user",
-      "session",
-      "user"
-    ];
-
-    for (const key of directKeys) {
-      const raw = localStorage.getItem(key);
-      if (!raw) continue;
-
-      try {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.sessionId) return parsed.sessionId;
-        if (parsed && parsed.session && parsed.session.sessionId) return parsed.session.sessionId;
-      } catch {}
-    }
-
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
-      const raw = localStorage.getItem(key);
-
-      if (!raw || !String(raw).includes("sessionId")) continue;
-
-      try {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.sessionId) return parsed.sessionId;
-        if (parsed && parsed.session && parsed.session.sessionId) return parsed.session.sessionId;
-      } catch {}
+    const raw = localStorage.getItem("fenixSession");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.sessionId) {
+        return parsed.sessionId;
+      }
     }
   } catch {}
 
   return "";
 }
 
-async function sendFenixFastHeartbeat() {
+async function sendFenixFastHeartbeat(reason = "timer") {
   const sessionId = getFenixHeartbeatSessionId();
 
   if (!sessionId) {
-    console.warn("Heartbeat Fenix ignorado: sessionId nao encontrado.");
-    return;
+    setFenixHeartbeatStatus("sem sessao");
+    console.warn("Heartbeat Fenix ignorado: sessionId nao encontrado. Motivo:", reason);
+    return false;
   }
 
   try {
-    await fetch(CONFIG.adminApi + "/api/fenix/app/heartbeat", {
+    const res = await fetch(CONFIG.adminApi + "/api/fenix/app/heartbeat", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
         sessionId,
-        tabsLoggedIn: Boolean(kickTabsLoggedIn)
+        kickLoggedIn: Boolean(kickLoggedIn || kickTabsLoggedIn),
+        tabsKickLoggedIn: Boolean(kickTabsLoggedIn),
+        tabsLoggedIn: Boolean(kickTabsLoggedIn),
+        reason
       })
     });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data.ok) {
+      const msg = data.message || data.error || ("erro " + res.status);
+      setFenixHeartbeatStatus(msg);
+      console.warn("Heartbeat Fenix falhou:", res.status, data);
+      return false;
+    }
+
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    const ss = String(now.getSeconds()).padStart(2, "0");
+
+    setFenixHeartbeatStatus("enviado " + hh + ":" + mm + ":" + ss);
+    return true;
   } catch (error) {
+    setFenixHeartbeatStatus("erro conexao");
     console.error("Erro heartbeat Fenix:", error);
+    return false;
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  setTimeout(sendFenixFastHeartbeat, 3000);
-  setTimeout(sendFenixFastHeartbeat, 8000);
-  setInterval(sendFenixFastHeartbeat, 30000);
-});
+function startFenixFastHeartbeat() {
+  ensureFenixHeartbeatStatusBox();
 
+  if (fenixHeartbeatTimer) {
+    clearInterval(fenixHeartbeatTimer);
+  }
+
+  setTimeout(() => sendFenixFastHeartbeat("start-1s"), 1000);
+  setTimeout(() => sendFenixFastHeartbeat("start-5s"), 5000);
+  setTimeout(() => sendFenixFastHeartbeat("start-15s"), 15000);
+
+  fenixHeartbeatTimer = setInterval(() => {
+    sendFenixFastHeartbeat("interval-30s");
+  }, 30000);
+}
+
+startFenixFastHeartbeat();
+
+try {
+  if (typeof loginFenix === "function" && !loginFenix.__fenixHeartbeatWrapped) {
+    const originalLoginFenixHeartbeat = loginFenix;
+
+    loginFenix = async function(...args) {
+      const result = await originalLoginFenixHeartbeat.apply(this, args);
+      setTimeout(() => sendFenixFastHeartbeat("apos-login-fenix"), 1000);
+      setTimeout(() => sendFenixFastHeartbeat("apos-login-fenix-5s"), 5000);
+      return result;
+    };
+
+    loginFenix.__fenixHeartbeatWrapped = true;
+  }
+} catch {}
+
+try {
+  if (typeof restoreSession === "function" && !restoreSession.__fenixHeartbeatWrapped) {
+    const originalRestoreSessionHeartbeat = restoreSession;
+
+    restoreSession = function(...args) {
+      const result = originalRestoreSessionHeartbeat.apply(this, args);
+      setTimeout(() => sendFenixFastHeartbeat("apos-restaurar-sessao"), 1000);
+      setTimeout(() => sendFenixFastHeartbeat("apos-restaurar-sessao-5s"), 5000);
+      return result;
+    };
+
+    restoreSession.__fenixHeartbeatWrapped = true;
+  }
+} catch {}
+
+try {
+  if (typeof refreshScreens === "function" && !refreshScreens.__fenixHeartbeatWrapped) {
+    const originalRefreshScreensHeartbeat = refreshScreens;
+
+    refreshScreens = async function(...args) {
+      const result = await originalRefreshScreensHeartbeat.apply(this, args);
+      setTimeout(() => sendFenixFastHeartbeat("apos-atualizar-telas"), 1000);
+      return result;
+    };
+
+    refreshScreens.__fenixHeartbeatWrapped = true;
+  }
+} catch {}
+
+try {
+  if (typeof completeCycle === "function" && !completeCycle.__fenixHeartbeatWrapped) {
+    const originalCompleteCycleHeartbeat = completeCycle;
+
+    completeCycle = async function(...args) {
+      const result = await originalCompleteCycleHeartbeat.apply(this, args);
+      setTimeout(() => sendFenixFastHeartbeat("apos-ciclo"), 1000);
+      return result;
+    };
+
+    completeCycle.__fenixHeartbeatWrapped = true;
+  }
+} catch {}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
+    ensureFenixHeartbeatStatusBox();
+    sendFenixFastHeartbeat("dom-ready");
+  });
+} else {
+  setTimeout(() => {
+    ensureFenixHeartbeatStatusBox();
+    sendFenixFastHeartbeat("dom-ja-pronto");
+  }, 500);
+}
 
 /* FENIX_AUTO_UPDATE_COMPACT_FINAL */
 function fenixEnsureCompactUpdateButton() {

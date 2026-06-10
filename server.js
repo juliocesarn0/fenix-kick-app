@@ -1249,13 +1249,13 @@ app.get('/api/fenix/admin/online-users', requireFenixAdmin, (req, res) => {
     const kickConnected = Boolean(user.kickConnected || user.kickLoggedIn || heartbeat?.kickConnected);
     const tabsLoggedIn = Boolean(heartbeat?.tabsLoggedIn);
 
-    const farmOk = Boolean(kickConnected && ((hasFastSignal && appOnline && tabsLoggedIn) || (!hasFastSignal && cycleActive)));
+    const farmOk = Boolean(kickConnected && ((hasFastSignal && appOnline && tabsLoggedIn) || cycleActive));
 
     let farmStatus = 'Offline';
 
     if (farmOk) {
       farmStatus = 'Farm OK';
-    } else if (appOnline && !tabsLoggedIn) {
+    } else if (appOnline && !tabsLoggedIn && !cycleActive) {
       farmStatus = 'Abas nao logadas';
     } else if (appOnline && !kickConnected) {
       farmStatus = 'Sem Kick';
