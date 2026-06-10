@@ -2682,7 +2682,7 @@ function fenixRenderGradeSorteioSimplesPage({ applicants = [], draw = null, mess
 
       <label>Data manual de início:</label>
       <input name="manualStartDate" type="date">
-      <div class="muted">Use apenas se escolher "Escolher data manual". O ideal é escolher uma segunda-feira.</div>
+      <div class="muted">Use apenas se escolher "Escolher data manual". Se aplicar apenas um dia, essa será a data exata usada. Se aplicar semana toda, escolha uma segunda-feira.</div>
       <br><br>
 
       <label>Aplicar:</label>
@@ -3364,7 +3364,15 @@ function fenixApplyDrawToRealScheduleFinal(draw, options = {}) {
     const offset = fenixDayOffsetFromKeyFinal(row.day);
     if (offset === null) continue;
 
-    const slotDate = fenixDateOnlyFinal(fenixAddDaysFinal(weekStart, offset));
+    let slotDate = fenixDateOnlyFinal(fenixAddDaysFinal(weekStart, offset));
+
+    if (
+      String(options.weekMode || '').toLowerCase() === 'manual' &&
+      applyScope !== 'semana' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(String(options.manualStartDate || ''))
+    ) {
+      slotDate = String(options.manualStartDate);
+    }
     const slotHour = String(row.hourLabel || '').trim();
 
     if (!/^\d{2}:00$/.test(slotHour)) continue;
