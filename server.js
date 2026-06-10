@@ -1884,12 +1884,14 @@ app.get('/admin/grade-sorteio', (req, res) => {
     <section>
       <h2>1. Importar formulário</h2>
       <p class="muted">Copie da planilha do Google Forms incluindo o cabeçalho e cole aqui.</p>
-      <label>Senha Admin:</label>
-      <input id="adminSecretBox" type="password" placeholder="Digite a senha admin da Railway">
-      <br><br>
-      <textarea id="pasteBox" placeholder="Cole aqui as respostas da planilha..."></textarea>
-      <button id="btnImportApplicants" type="button">Importar inscritos</button>
-      <button id="btnLoadApplicants" class="secondary" type="button">Atualizar lista</button>
+      <form method="POST" action="/admin/grade-sorteio/importar">
+        <label>Senha Admin:</label>
+        <input id="adminSecretBox" name="adminSecret" type="password" placeholder="Digite a senha admin da Railway">
+        <br><br>
+        <textarea id="pasteBox" name="text" placeholder="Cole aqui as respostas da planilha..."></textarea>
+        <button type="submit">Importar inscritos</button>
+        <button id="btnLoadApplicants" class="secondary" type="button">Atualizar lista</button>
+      </form>
       <div id="importMsg" class="muted"></div>
     </section>
 
@@ -2119,6 +2121,80 @@ app.get('/admin/grade-sorteio', (req, res) => {
 </html>
   `);
 });
+
+
+// FENIX_GRADE_SORTEIO_FORM_POST_FINAL
+app.use(express.urlencoded({ limit: '25mb', extended: true }));
+
+app.post('/admin/grade-sorteio/importar', (req, res, next) => {
+  req.headers['x-fenix-admin'] = 'GokuuMods';
+  req.headers['x-fenix-admin-secret'] = String(req.body?.adminSecret || '').trim();
+  next();
+}, requireFenixAdmin, (req, res) => {
+  try {
+    const pasted = String(req.body?.text || '');
+    const parsed = fenixParseApplicantsFromPaste(pasted);
+
+    if (!parsed.length) {
+      return res.type('html').send(`
+        <body style="background:#090909;color:white;font-family:Arial;padding:30px">
+          <h1 style="color:#f3c451">Erro ao importar</h1>
+          <p>Nenhum inscrito encontrado.</p>
+          <p>Copie a planilha incluindo a linha do cabeçalho.</p>
+          <a style="color:#f3c451" href="/admin/grade-sorteio">Voltar</a>
+        </body>
+      `);
+    }
+
+    const data = readFenixData();
+
+    data.formApplicants = Array.isArray(data.formApplicants) ? data.formApplicants : [];
+
+    const current = new Map();
+
+    for (const applicant of data.formApplicants) {
+      const key = fenixNormalizeKickNick(applicant.slug || applicant.nick).toLowerCase();
+      if (key) current.set(key, applicant);
+    }
+
+    for (const applicant of parsed) {
+      const key = applicant.slug;
+
+      if (current.has(key)) {
+        const existing = current.get(key);
+        Object.assign(existing, {
+          ...existing,
+          ...applicant,
+          ignored: Boolean(existing.ignored),
+          updatedAt: new Date().toISOString()
+        });
+      } else {
+        data.formApplicants.push(applicant);
+        current.set(key, applicant);
+      }
+    }
+
+    writeFenixData(data);
+
+    return res.type('html').send(`
+      <body style="background:#090909;color:white;font-family:Arial;padding:30px">
+        <h1 style="color:#f3c451">Importado com sucesso ✅</h1>
+        <p>Inscritos importados/atualizados: <b>${parsed.length}</b></p>
+        <p>Total salvo no Admin: <b>${data.formApplicants.length}</b></p>
+        <a style="color:#f3c451;font-size:18px" href="/admin/grade-sorteio">Voltar para o sorteio da grade</a>
+      </body>
+    `);
+  } catch (error) {
+    return res.type('html').send(`
+      <body style="background:#090909;color:white;font-family:Arial;padding:30px">
+        <h1 style="color:#ff7777">Erro</h1>
+        <pre>${String(error.stack || error.message || error)}</pre>
+        <a style="color:#f3c451" href="/admin/grade-sorteio">Voltar</a>
+      </body>
+    `);
+  }
+});
+
 
 app.get('/api/fenix/admin/form-applicants', requireFenixAdmin, (req, res) => {
   const data = readFenixData();
