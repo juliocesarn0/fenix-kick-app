@@ -1520,6 +1520,668 @@ app.get('/admin', (req, res) => {
   res.end("<!doctype html>\n<html lang=\"pt-BR\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />\n  <title>Fenix Lurk Admin</title>\n  <style>\n    *{box-sizing:border-box}\n    body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#05070d;color:#fff}\n    header{padding:18px 24px;border-bottom:1px solid rgba(0,255,106,.25);background:#07110c;display:flex;justify-content:space-between;align-items:center;gap:14px}\n    h1{margin:0;color:#00ff6a;font-size:22px}\n    h2{margin:0 0 14px;color:#f5b22a}\n    main{padding:20px;display:grid;gap:16px}\n    .card{border:1px solid rgba(0,255,106,.25);background:rgba(10,15,25,.96);border-radius:16px;padding:16px}\n    .login{display:grid;grid-template-columns:1fr 1fr auto auto;gap:10px;align-items:end}\n    label{display:grid;gap:6px;color:#b8c6d8;font-size:12px;font-weight:900;text-transform:uppercase}\n    input,textarea{width:100%;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:#080b12;color:#fff;padding:11px 12px;font-weight:800}\n    button{border:1px solid rgba(0,255,106,.65);border-radius:10px;background:rgba(0,255,106,.14);color:#fff;padding:11px 14px;cursor:pointer;font-weight:900}\n    button:hover{background:rgba(0,255,106,.25)}\n    .danger{border-color:rgba(255,70,70,.65);background:rgba(255,70,70,.12)}\n    .gold{border-color:rgba(245,178,42,.7);background:rgba(245,178,42,.13)}\n    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}\n    table{width:100%;border-collapse:collapse;font-size:13px}\n    th,td{padding:10px 8px;border-bottom:1px solid rgba(255,255,255,.08);text-align:left}\n    th{color:#00ff6a;background:rgba(0,255,106,.06)}\n    .pill{padding:4px 8px;border-radius:999px;font-size:11px;font-weight:900;display:inline-block}\n    .ok{color:#00ff6a;border:1px solid rgba(0,255,106,.5);background:rgba(0,255,106,.12)}\n    .bad{color:#ff5252;border:1px solid rgba(255,82,82,.5);background:rgba(255,82,82,.12)}\n    .warn{color:#f5b22a;border:1px solid rgba(245,178,42,.5);background:rgba(245,178,42,.12)}\n    .muted{color:#9ba8ba}\n    .row24{display:grid;grid-template-columns:80px 1fr 1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:center}\n    .row24 b{color:#f5b22a}\n    .msg{color:#f5b22a;font-weight:900;margin-top:10px;min-height:20px}\n    @media(max-width:900px){.login,.grid2,.row24{grid-template-columns:1fr}header{display:block}}\n  </style>\n</head>\n<body>\n  <header>\n    <div>\n      <h1>Fenix Lurk Admin</h1>\n      <div style=\"color:#f5b22a;font-weight:800;font-size:13px\">Painel externo · atualiza sem trocar o app dos usuarios</div>\n    </div>\n    <div id=\"topStatus\" style=\"color:#f5b22a;font-weight:900\">Desconectado</div>\n  </header>\n\n  <main>\n    <section class=\"card\">\n      <div class=\"login\">\n        <label>Usuario Admin<input id=\"adminUser\" value=\"GokuuMods\" /></label>\n        <label>Senha Admin<input id=\"adminSecret\" type=\"password\" placeholder=\"senha da Railway\" /></label>\n        <button onclick=\"saveLogin()\">Entrar / Salvar</button>\n        <button class=\"danger\" onclick=\"logout()\">Sair</button>\n      </div>\n      <div class=\"msg\" id=\"loginMsg\">Digite a senha admin para liberar o painel.</div>\n    </section>\n\n    <section class=\"grid2\">\n      <div class=\"card\">\n        <h2>Farm ativo agora</h2>\n        <button onclick=\"loadUsers()\">Atualizar usuarios</button>\n        <div id=\"activeUsers\"></div>\n      </div>\n      <div class=\"card\">\n        <h2>Ranking de pontos da semana</h2>\n        <button onclick=\"loadUsers()\">Atualizar ranking</button>\n        <div id=\"rankingUsers\"></div>\n      </div>\n    </section>\n\n    <section class=\"card\">\n      <h2>Grade de lives por horario</h2>\n      <div class=\"muted\">Vazio = app abre kick.com. Com canal = app abre a live agendada.</div>\n      <br />\n      <label>Data<input id=\"slotDate\" type=\"date\" /></label>\n      <br />\n      <button onclick=\"loadSchedule()\">Carregar grade</button>\n      <button class=\"gold\" onclick=\"saveAllVisible()\">Salvar grade inteira</button>\n      <div class=\"msg\" id=\"scheduleMsg\"></div>\n      <div id=\"scheduleRows\"></div>\n    </section>\n\n    <section class=\"card\">\n      <h2>Aviso para o app</h2>\n      <textarea id=\"noticeText\" rows=\"3\" placeholder=\"Digite o aviso que aparece para os usuarios...\"></textarea>\n      <br /><br />\n      <button onclick=\"saveNotice()\">Salvar aviso</button>\n      <div class=\"msg\" id=\"noticeMsg\"></div>\n    </section>\n  </main>\n\n<script>\nconst API = location.origin;\nconst hours = Array.from({length:24}, (_,i)=>String(i).padStart(2,\"0\")+\":00\");\n\nfunction $(id){return document.getElementById(id)}\nfunction today(){return new Date().toISOString().slice(0,10)}\nfunction escapeHtml(v){\n  return String(v || \"\").replace(/[&<>\"']/g, function(m){\n    return {\"&\":\"&amp;\",\"<\":\"&lt;\",\">\":\"&gt;\",'\"':\"&quot;\",\"'\":\"&#039;\"}[m];\n  });\n}\nfunction adminHeaders(){\n  return {\n    \"Content-Type\":\"application/json\",\n    \"x-fenix-admin\": $(\"adminUser\").value.trim() || \"GokuuMods\",\n    \"x-fenix-admin-secret\": $(\"adminSecret\").value.trim()\n  };\n}\nfunction buildKickUrl(name){\n  const clean = String(name || \"\").trim().replace(/^https?:\\/\\/kick\\.com\\//i,\"\").replace(/^kick\\.com\\//i,\"\").replace(/^@/,\"\");\n  return clean ? \"https://kick.com/\" + clean : \"\";\n}\nfunction saveLogin(){\n  localStorage.setItem(\"fenixAdminUser\", $(\"adminUser\").value.trim() || \"GokuuMods\");\n  localStorage.setItem(\"fenixAdminSecret\", $(\"adminSecret\").value.trim());\n  $(\"topStatus\").textContent = \"Admin conectado\";\n  $(\"loginMsg\").textContent = \"Login salvo neste navegador.\";\n  loadUsers();\n  loadSchedule();\n}\nfunction logout(){\n  localStorage.removeItem(\"fenixAdminSecret\");\n  $(\"adminSecret\").value = \"\";\n  $(\"topStatus\").textContent = \"Desconectado\";\n  $(\"loginMsg\").textContent = \"Senha removida.\";\n}\nasync function apiGet(url){\n  const res = await fetch(API + url, { headers: adminHeaders(), cache:\"no-store\" });\n  const data = await res.json();\n  if(!res.ok || data.ok === false) throw new Error(data.message || \"Erro API\");\n  return data;\n}\nasync function apiPost(url, body){\n  const res = await fetch(API + url, {method:\"POST\",headers:adminHeaders(),body:JSON.stringify(body)});\n  const data = await res.json();\n  if(!res.ok || data.ok === false) throw new Error(data.message || \"Erro API\");\n  return data;\n}\nfunction farmPill(user){\n  if (user.farmOk) return '<span class=\"pill ok\">Farm OK</span>';\n  if (user.farmStatus === \"Atenção\" || user.farmStatus === \"Atencao\") return '<span class=\"pill warn\">Atenção</span>';\n  if (user.online || user.farmActive) return '<span class=\"pill warn\">Incompleto</span>';\n  return '<span class=\"pill bad\">Offline</span>';\n}\nfunction kickPill(user){\n  return (user.kickConnected || user.kickLoggedIn)\n    ? '<span class=\"pill ok\">Sim</span>'\n    : '<span class=\"pill bad\">Nao</span>';\n}\nfunction userTable(users, mode){\n  if(!users.length) return '<p class=\"muted\">Nenhum usuario encontrado.</p>';\n\n  return '<table><thead><tr>' +\n    '<th>#</th><th>Usuario</th><th>Kick</th><th>Farm</th><th>Kick vinculada</th><th>Ultimo ciclo</th><th>Semana</th><th>Total</th><th>Status</th>' +\n    '</tr></thead><tbody>' +\n    users.map(function(u,i){\n      const weekly = Number(u.weeklyPoints || 0);\n      const total = Number(u.points || 0);\n      const approved = weekly >= 1815;\n      const rankingStatus = approved ? '<span class=\"pill ok\">Aprovado 70%</span>' : '<span class=\"pill bad\">Pendente</span>';\n      const status = mode === \"ranking\" ? rankingStatus : farmPill(u);\n\n      return '<tr>' +\n        '<td>'+(i+1)+'</td>' +\n        '<td><b>'+escapeHtml(u.username || \"-\")+'</b></td>' +\n        '<td>'+escapeHtml(u.kickUsername || u.kickName || \"-\")+'</td>' +\n        '<td>'+farmPill(u)+'</td>' +\n        '<td>'+kickPill(u)+'</td>' +\n        '<td>'+escapeHtml(u.lastCycleText || \"Nunca\")+'</td>' +\n        '<td>'+weekly+' pts</td>' +\n        '<td>'+total+' pts</td>' +\n        '<td>'+status+'</td>' +\n      '</tr>';\n    }).join(\"\") + '</tbody></table>';\n}\nasync function loadUsers(){\n  try{\n    const data = await apiGet(\"/api/fenix/admin/online-users\");\n    const users = Array.isArray(data.users) ? data.users : [];\n    const active = users.filter(function(u){ return u.online || u.farmActive || u.farmOk; });\n    const ranking = users.slice().sort(function(a,b){\n      return Number(b.weeklyPoints||0)-Number(a.weeklyPoints||0) || Number(b.points||0)-Number(a.points||0);\n    });\n\n    $(\"activeUsers\").innerHTML = userTable(active, \"active\");\n    $(\"rankingUsers\").innerHTML = userTable(ranking, \"ranking\");\n    $(\"loginMsg\").textContent = \"Usuarios carregados.\";\n  }catch(e){ $(\"loginMsg\").textContent = e.message; }\n}\nfunction renderSchedule(schedule){\n  const date = $(\"slotDate\").value || today();\n  $(\"scheduleRows\").innerHTML = hours.map(function(hour){\n    const slot = schedule.find(function(s){ return s.slotDate === date && s.slotHour === hour; }) || {};\n    return '<div class=\"row24\" data-hour=\"'+hour+'\"><b>'+hour+'</b>' +\n      '<input data-screen=\"1\" placeholder=\"Tela 1 canal\" value=\"'+escapeHtml(slot.screen1Name || \"\")+'\" />' +\n      '<input data-screen=\"2\" placeholder=\"Tela 2 canal\" value=\"'+escapeHtml(slot.screen2Name || \"\")+'\" />' +\n      '<input data-screen=\"3\" placeholder=\"Tela 3 canal\" value=\"'+escapeHtml(slot.screen3Name || \"\")+'\" />' +\n      '<button onclick=\"saveHour(\\''+hour+'\\')\">Salvar</button></div>';\n  }).join(\"\");\n}\nasync function loadSchedule(){\n  try{\n    const data = await apiGet(\"/api/fenix/admin/schedule\");\n    renderSchedule(Array.isArray(data.schedule) ? data.schedule : []);\n    $(\"scheduleMsg\").textContent = \"Grade carregada.\";\n  }catch(e){ $(\"scheduleMsg\").textContent = e.message; }\n}\nasync function saveHour(hour){\n  const row = document.querySelector('.row24[data-hour=\"'+hour+'\"]');\n  const date = $(\"slotDate\").value || today();\n  const s1 = row.querySelector('[data-screen=\"1\"]').value.trim();\n  const s2 = row.querySelector('[data-screen=\"2\"]').value.trim();\n  const s3 = row.querySelector('[data-screen=\"3\"]').value.trim();\n\n  try{\n    await apiPost(\"/api/fenix/admin/schedule\", {\n      adminUsername:$(\"adminUser\").value.trim() || \"GokuuMods\",\n      adminSecret:$(\"adminSecret\").value.trim(),\n      slotDate:date,\n      slotHour:hour,\n      screen1Name:s1, screen1Url:buildKickUrl(s1), screen1Maintenance:!s1,\n      screen2Name:s2, screen2Url:buildKickUrl(s2), screen2Maintenance:!s2,\n      screen3Name:s3, screen3Url:buildKickUrl(s3), screen3Maintenance:!s3\n    });\n    $(\"scheduleMsg\").textContent = \"Horario \" + hour + \" salvo.\";\n  }catch(e){ $(\"scheduleMsg\").textContent = e.message; }\n}\nasync function saveAllVisible(){\n  for(const hour of hours){ await saveHour(hour); }\n  $(\"scheduleMsg\").textContent = \"Grade inteira salva.\";\n}\nasync function saveNotice(){\n  try{\n    await apiPost(\"/api/fenix/admin/notice\", {\n      adminUsername:$(\"adminUser\").value.trim() || \"GokuuMods\",\n      adminSecret:$(\"adminSecret\").value.trim(),\n      message:$(\"noticeText\").value.trim()\n    });\n    $(\"noticeMsg\").textContent = \"Aviso salvo.\";\n  }catch(e){ $(\"noticeMsg\").textContent = e.message; }\n}\n\n$(\"slotDate\").value = today();\n$(\"adminUser\").value = localStorage.getItem(\"fenixAdminUser\") || \"GokuuMods\";\n$(\"adminSecret\").value = localStorage.getItem(\"fenixAdminSecret\") || \"\";\n\nif($(\"adminSecret\").value){\n  $(\"topStatus\").textContent = \"Admin conectado\";\n  loadUsers();\n  loadSchedule();\n}\n\n// FENIX_ADMIN_AUTO_REFRESH_30S_FINAL\nsetInterval(function(){\n  var input = document.getElementById('adminSecret');\n  if(input && input.value){\n    loadUsers();\n  }\n}, 30000);\n\n</script>\n</body>\n</html>");
 });
 
+// FENIX_FORM_GRADE_SORTEIO_FINAL
+const FENIX_FORM_DAYS = [
+  { key: 'domingo', label: 'Domingo' },
+  { key: 'segunda', label: 'Segunda' },
+  { key: 'terca', label: 'Terça' },
+  { key: 'quarta', label: 'Quarta' },
+  { key: 'quinta', label: 'Quinta' },
+  { key: 'sexta', label: 'Sexta' },
+  { key: 'sabado', label: 'Sábado' }
+];
+
+const FENIX_DRAW_DAYS = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+
+function fenixText(value) {
+  return String(value || '').trim();
+}
+
+function fenixTextKey(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function fenixNormalizeKickNick(value) {
+  let nick = fenixText(value);
+
+  nick = nick
+    .replace(/^https?:\/\/kick\.com\//i, '')
+    .replace(/^kick\.com\//i, '')
+    .replace(/^@/, '')
+    .split(/[/?#]/)[0]
+    .trim();
+
+  return nick;
+}
+
+function fenixKickUrlFromNick(nick) {
+  const clean = fenixNormalizeKickNick(nick);
+  return clean ? 'https://kick.com/' + clean.toLowerCase() : '';
+}
+
+function fenixFindColumn(headers, variants) {
+  const normalized = headers.map((item) => fenixTextKey(item));
+
+  for (const variant of variants) {
+    const key = fenixTextKey(variant);
+    const exact = normalized.findIndex((header) => header === key);
+
+    if (exact >= 0) return exact;
+  }
+
+  for (const variant of variants) {
+    const key = fenixTextKey(variant);
+    const partial = normalized.findIndex((header) => header.includes(key));
+
+    if (partial >= 0) return partial;
+  }
+
+  return -1;
+}
+
+function fenixCell(cols, index) {
+  if (index < 0 || index >= cols.length) return '';
+  return fenixText(cols[index]);
+}
+
+function fenixParseHours(value) {
+  const result = [];
+  const text = fenixText(value);
+
+  if (!text) return result;
+
+  const regex = /(\d{1,2})\s*:?\s*00\s*(?:as|às|a|-|até)\s*(\d{1,2})\s*:?\s*00/gi;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    const hour = Number(match[1]);
+
+    if (Number.isInteger(hour) && hour >= 0 && hour <= 23 && !result.includes(hour)) {
+      result.push(hour);
+    }
+  }
+
+  return result.sort((a, b) => a - b);
+}
+
+function fenixFormatHour(hour) {
+  return String(hour).padStart(2, '0') + ':00';
+}
+
+function fenixParseApplicantsFromPaste(pastedText) {
+  const raw = String(pastedText || '').trim();
+
+  if (!raw) return [];
+
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean);
+
+  if (lines.length < 2) return [];
+
+  const delimiter = lines[0].includes('\t') ? '\t' : ';';
+  const headers = lines[0].split(delimiter).map(fenixText);
+
+  const idxName = fenixFindColumn(headers, ['Qual seu nome?', 'Nome', 'Nome da pessoa']);
+  const idxNick = fenixFindColumn(headers, ['Qual seu nick na Kick?', 'Nick', 'Nick Kick', 'Nome do Canal']);
+  const idxLink = fenixFindColumn(headers, ['Qual o link do seu canal na Kick?', 'Link do canal', 'Canal na Kick']);
+  const idxWhats = fenixFindColumn(headers, ['Qual seu WhatsApp?', 'WhatsApp', 'Whats']);
+  const idxEmail = fenixFindColumn(headers, ['Qual seu e-mail?', 'email']);
+  const idxIndicado = fenixFindColumn(headers, ['Quem te indicou', 'indicado']);
+  const idxBaixou = fenixFindColumn(headers, ['Você já baixou', 'baixou']);
+  const idxObs = fenixFindColumn(headers, ['Observação final', 'observacao', 'observação']);
+
+  const dayIndexes = {
+    domingo: fenixFindColumn(headers, ['[DOMINGO]', 'DOMINGO']),
+    segunda: fenixFindColumn(headers, ['[SEGUNDA]', 'SEGUNDA']),
+    terca: fenixFindColumn(headers, ['[TERÇA]', '[TERCA]', 'TERÇA', 'TERCA']),
+    quarta: fenixFindColumn(headers, ['[QUARTA]', 'QUARTA']),
+    quinta: fenixFindColumn(headers, ['[QUINTA]', 'QUINTA']),
+    sexta: fenixFindColumn(headers, ['[SEXTA]', 'SEXTA']),
+    sabado: fenixFindColumn(headers, ['[SÁBADO]', '[SABADO]', 'SÁBADO', 'SABADO'])
+  };
+
+  const byNick = new Map();
+
+  for (const line of lines.slice(1)) {
+    const cols = line.split(delimiter);
+
+    const name = fenixCell(cols, idxName);
+    const nickFromNick = fenixNormalizeKickNick(fenixCell(cols, idxNick));
+    const nickFromLink = fenixNormalizeKickNick(fenixCell(cols, idxLink));
+    const nick = nickFromNick || nickFromLink;
+
+    if (!nick) continue;
+
+    const key = nick.toLowerCase();
+
+    const availability = {};
+
+    for (const day of FENIX_FORM_DAYS) {
+      const hours = fenixParseHours(fenixCell(cols, dayIndexes[day.key]));
+      availability[day.key] = hours;
+    }
+
+    const applicant = {
+      id: 'form-' + key,
+      name,
+      nick,
+      slug: nick.toLowerCase(),
+      url: fenixKickUrlFromNick(nick),
+      whatsapp: fenixCell(cols, idxWhats),
+      email: fenixCell(cols, idxEmail),
+      referredBy: fenixCell(cols, idxIndicado),
+      appDownloaded: fenixCell(cols, idxBaixou),
+      observation: fenixCell(cols, idxObs),
+      availability,
+      ignored: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    if (byNick.has(key)) {
+      const previous = byNick.get(key);
+
+      for (const day of FENIX_FORM_DAYS) {
+        const merged = Array.from(new Set([
+          ...(previous.availability?.[day.key] || []),
+          ...(applicant.availability?.[day.key] || [])
+        ])).sort((a, b) => a - b);
+
+        previous.availability[day.key] = merged;
+      }
+
+      previous.name = applicant.name || previous.name;
+      previous.whatsapp = applicant.whatsapp || previous.whatsapp;
+      previous.email = applicant.email || previous.email;
+      previous.referredBy = applicant.referredBy || previous.referredBy;
+      previous.appDownloaded = applicant.appDownloaded || previous.appDownloaded;
+      previous.observation = applicant.observation || previous.observation;
+      previous.updatedAt = new Date().toISOString();
+    } else {
+      byNick.set(key, applicant);
+    }
+  }
+
+  return Array.from(byNick.values());
+}
+
+function fenixRandomSort(items) {
+  return items
+    .map((item) => ({ item, random: Math.random() }))
+    .sort((a, b) => a.random - b.random)
+    .map((entry) => entry.item);
+}
+
+function fenixPickVacantHours(vacancyPerDay) {
+  const count = Math.max(0, Math.min(24, Number(vacancyPerDay || 0)));
+  const hours = fenixRandomSort(Array.from({ length: 24 }, (_, index) => index));
+  return new Set(hours.slice(0, count));
+}
+
+function fenixGenerateGradeDraw(applicants, options = {}) {
+  const vacancyPerDay = Math.max(0, Math.min(24, Number(options.vacancyPerDay || 0)));
+  const screensPerHour = 3;
+  const usage = {};
+  const usageByDay = {};
+  const rows = [];
+
+  const activeApplicants = applicants
+    .filter((item) => item && !item.ignored && item.nick)
+    .map((item) => ({
+      ...item,
+      slug: fenixNormalizeKickNick(item.slug || item.nick).toLowerCase(),
+      url: item.url || fenixKickUrlFromNick(item.nick)
+    }));
+
+  for (const applicant of activeApplicants) {
+    usage[applicant.slug] = 0;
+    usageByDay[applicant.slug] = {};
+  }
+
+  for (const dayKey of FENIX_DRAW_DAYS) {
+    const vacantHours = fenixPickVacantHours(vacancyPerDay);
+
+    for (let hour = 0; hour < 24; hour += 1) {
+      const row = {
+        id: dayKey + '-' + String(hour).padStart(2, '0'),
+        day: dayKey,
+        dayLabel: (FENIX_FORM_DAYS.find((day) => day.key === dayKey) || {}).label || dayKey,
+        hour,
+        hourLabel: fenixFormatHour(hour),
+        manualVacancy: vacantHours.has(hour),
+        screens: []
+      };
+
+      if (row.manualVacancy) {
+        for (let screen = 1; screen <= screensPerHour; screen += 1) {
+          row.screens.push({
+            screen,
+            status: 'VAGO',
+            nick: '',
+            url: ''
+          });
+        }
+
+        rows.push(row);
+        continue;
+      }
+
+      const picked = new Set();
+
+      for (let screen = 1; screen <= screensPerHour; screen += 1) {
+        const candidates = activeApplicants.filter((applicant) => {
+          const available = Array.isArray(applicant.availability?.[dayKey])
+            ? applicant.availability[dayKey]
+            : [];
+
+          return available.includes(hour) && !picked.has(applicant.slug);
+        });
+
+        candidates.sort((a, b) => {
+          const aUsage = usage[a.slug] || 0;
+          const bUsage = usage[b.slug] || 0;
+
+          if (aUsage !== bUsage) return aUsage - bUsage;
+
+          const aDay = usageByDay[a.slug]?.[dayKey] || 0;
+          const bDay = usageByDay[b.slug]?.[dayKey] || 0;
+
+          if (aDay !== bDay) return aDay - bDay;
+
+          return Math.random() - 0.5;
+        });
+
+        const selected = candidates[0];
+
+        if (!selected) {
+          row.screens.push({
+            screen,
+            status: 'SEM_CANDIDATO',
+            nick: '',
+            url: ''
+          });
+          continue;
+        }
+
+        picked.add(selected.slug);
+        usage[selected.slug] = (usage[selected.slug] || 0) + 1;
+        usageByDay[selected.slug][dayKey] = (usageByDay[selected.slug][dayKey] || 0) + 1;
+
+        row.screens.push({
+          screen,
+          status: 'OK',
+          name: selected.name,
+          nick: selected.nick,
+          slug: selected.slug,
+          url: selected.url,
+          whatsapp: selected.whatsapp
+        });
+      }
+
+      rows.push(row);
+    }
+  }
+
+  return {
+    id: 'draw-' + Date.now(),
+    createdAt: new Date().toISOString(),
+    vacancyPerDay,
+    screensPerHour,
+    rows,
+    summary: {
+      applicants: activeApplicants.length,
+      totalRows: rows.length,
+      totalVacantHours: rows.filter((row) => row.manualVacancy).length,
+      totalOpenScreens: rows.reduce((sum, row) => {
+        return sum + row.screens.filter((screen) => screen.status !== 'OK').length;
+      }, 0),
+      usage
+    }
+  };
+}
+
+app.get('/admin/grade-sorteio', (req, res) => {
+  res.type('html').send(`
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Fenix Lurk - Sorteio de Grade</title>
+  <style>
+    body { margin: 0; background: #090909; color: #f5f5f5; font-family: Arial, sans-serif; }
+    header { padding: 22px; border-bottom: 1px solid #3a2a08; background: linear-gradient(135deg, #080808, #1b1304); }
+    h1 { margin: 0; color: #f3c451; }
+    main { padding: 20px; display: grid; gap: 18px; }
+    section { background: #111; border: 1px solid #30240a; border-radius: 14px; padding: 16px; }
+    textarea, input { width: 100%; box-sizing: border-box; background: #070707; color: #fff; border: 1px solid #3d300f; border-radius: 10px; padding: 10px; }
+    textarea { min-height: 180px; }
+    button { background: #d6a82d; color: #090909; border: none; padding: 10px 14px; border-radius: 10px; font-weight: 800; cursor: pointer; margin: 4px; }
+    button.secondary { background: #222; color: #f3c451; border: 1px solid #4a390f; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .card { background: #080808; border: 1px solid #2d230d; border-radius: 12px; padding: 12px; }
+    .muted { color: #aaa; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid #222; padding: 8px; text-align: left; vertical-align: top; }
+    th { color: #f3c451; background: #0c0c0c; position: sticky; top: 0; }
+    .ok { color: #55ff99; font-weight: 800; }
+    .vago { color: #ffcc55; font-weight: 800; }
+    .bad { color: #ff7777; font-weight: 800; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Fenix Lurk - Sorteio de Grade</h1>
+    <div class="muted">Importe os formulários, veja os inscritos e gere a grade respeitando os horários marcados.</div>
+  </header>
+
+  <main>
+    <section>
+      <h2>1. Importar formulário</h2>
+      <p class="muted">Copie da planilha do Google Forms incluindo o cabeçalho e cole aqui.</p>
+      <textarea id="pasteBox" placeholder="Cole aqui as respostas da planilha..."></textarea>
+      <button onclick="importApplicants()">Importar inscritos</button>
+      <button class="secondary" onclick="loadApplicants()">Atualizar lista</button>
+      <div id="importMsg" class="muted"></div>
+    </section>
+
+    <section>
+      <h2>2. Inscritos importados</h2>
+      <div id="applicantsBox" class="grid"></div>
+    </section>
+
+    <section>
+      <h2>3. Gerar sorteio da semana</h2>
+      <label>Horários vagos por dia para preencher manual no grupo:</label>
+      <input id="vacancyPerDay" type="number" min="0" max="24" value="3">
+      <br><br>
+      <button onclick="generateDraw()">Gerar grade por sorteio</button>
+      <button class="secondary" onclick="loadDraw()">Ver último sorteio</button>
+      <div id="drawMsg" class="muted"></div>
+    </section>
+
+    <section>
+      <h2>4. Grade sorteada</h2>
+      <div class="muted">Essa grade é rascunho. Ainda não altera a grade ativa do app.</div>
+      <br>
+      <div id="drawBox"></div>
+    </section>
+  </main>
+
+<script>
+  const API = "";
+  let adminSecret = localStorage.getItem("fenixAdminSecret") || "";
+
+  function getSecret() {
+    if (!adminSecret) {
+      adminSecret = prompt("Digite a senha admin:");
+      if (adminSecret) localStorage.setItem("fenixAdminSecret", adminSecret);
+    }
+    return adminSecret;
+  }
+
+  async function api(path, options) {
+    const res = await fetch(API + path, {
+      ...(options || {}),
+      headers: {
+        "Content-Type": "application/json",
+        "x-fenix-admin": "GokuuMods",
+        "x-fenix-admin-secret": getSecret(),
+        ...((options && options.headers) || {})
+      }
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || data.ok === false) {
+      throw new Error(data.message || data.error || "Erro na API");
+    }
+
+    return data;
+  }
+
+  function dayText(av) {
+    const names = {
+      domingo: "Dom",
+      segunda: "Seg",
+      terca: "Ter",
+      quarta: "Qua",
+      quinta: "Qui",
+      sexta: "Sex",
+      sabado: "Sáb"
+    };
+
+    return Object.keys(names).map((key) => {
+      const hours = av && Array.isArray(av[key]) ? av[key] : [];
+      if (!hours.length) return "";
+      return names[key] + ": " + hours.map((h) => String(h).padStart(2, "0") + "h").join(", ");
+    }).filter(Boolean).join(" | ");
+  }
+
+  async function importApplicants() {
+    const text = document.getElementById("pasteBox").value;
+
+    document.getElementById("importMsg").textContent = "Importando...";
+
+    try {
+      const data = await api("/api/fenix/admin/form-applicants/import", {
+        method: "POST",
+        body: JSON.stringify({ text })
+      });
+
+      document.getElementById("importMsg").textContent = "Importados/atualizados: " + data.imported;
+      await loadApplicants();
+    } catch (error) {
+      document.getElementById("importMsg").textContent = "Erro: " + error.message;
+    }
+  }
+
+  async function loadApplicants() {
+    const box = document.getElementById("applicantsBox");
+    box.innerHTML = "Carregando...";
+
+    try {
+      const data = await api("/api/fenix/admin/form-applicants", { method: "GET" });
+
+      box.innerHTML = "";
+
+      data.applicants.forEach((item) => {
+        const div = document.createElement("div");
+        div.className = "card";
+        div.innerHTML =
+          "<b>" + (item.nick || "") + "</b><br>" +
+          "<span class='muted'>" + (item.name || "") + "</span><br>" +
+          "<span>Whats: " + (item.whatsapp || "-") + "</span><br>" +
+          "<span class='muted'>" + dayText(item.availability || {}) + "</span>";
+
+        box.appendChild(div);
+      });
+    } catch (error) {
+      box.innerHTML = "Erro: " + error.message;
+    }
+  }
+
+  async function generateDraw() {
+    const vacancyPerDay = Number(document.getElementById("vacancyPerDay").value || 0);
+
+    document.getElementById("drawMsg").textContent = "Gerando sorteio...";
+
+    try {
+      const data = await api("/api/fenix/admin/grade-draw/generate", {
+        method: "POST",
+        body: JSON.stringify({ vacancyPerDay })
+      });
+
+      document.getElementById("drawMsg").textContent =
+        "Sorteio gerado. Inscritos: " + data.draw.summary.applicants +
+        " | Vagos por dia: " + data.draw.vacancyPerDay;
+
+      renderDraw(data.draw);
+    } catch (error) {
+      document.getElementById("drawMsg").textContent = "Erro: " + error.message;
+    }
+  }
+
+  async function loadDraw() {
+    try {
+      const data = await api("/api/fenix/admin/grade-draw", { method: "GET" });
+      renderDraw(data.draw);
+    } catch (error) {
+      document.getElementById("drawBox").innerHTML = "Erro: " + error.message;
+    }
+  }
+
+  function copyVacancy(day, hour) {
+    const msg =
+      "🔥 VAGA ABERTA NA GRADE FENIX 🔥\n\n" +
+      "Horário: " + day + " às " + hour + "\n" +
+      "Vagas disponíveis na grade.\n\n" +
+      "Quem estiver em live nesse horário, marca ✅ aqui no grupo.";
+
+    navigator.clipboard.writeText(msg);
+    alert("Mensagem copiada.");
+  }
+
+  function renderDraw(draw) {
+    const box = document.getElementById("drawBox");
+
+    if (!draw || !Array.isArray(draw.rows)) {
+      box.innerHTML = "Nenhum sorteio gerado ainda.";
+      return;
+    }
+
+    let html = "<table><thead><tr><th>Dia</th><th>Hora</th><th>Tela 1</th><th>Tela 2</th><th>Tela 3</th><th>Ação</th></tr></thead><tbody>";
+
+    draw.rows.forEach((row) => {
+      const screens = row.screens || [];
+
+      function screenText(index) {
+        const s = screens[index] || {};
+        if (s.status === "OK") return "<span class='ok'>" + s.nick + "</span>";
+        if (s.status === "VAGO") return "<span class='vago'>VAGO</span>";
+        return "<span class='bad'>SEM CANDIDATO</span>";
+      }
+
+      const action = row.manualVacancy
+        ? "<button onclick=\"copyVacancy('" + row.dayLabel + "','" + row.hourLabel + "')\">Copiar vaga</button>"
+        : "";
+
+      html += "<tr>" +
+        "<td>" + row.dayLabel + "</td>" +
+        "<td>" + row.hourLabel + "</td>" +
+        "<td>" + screenText(0) + "</td>" +
+        "<td>" + screenText(1) + "</td>" +
+        "<td>" + screenText(2) + "</td>" +
+        "<td>" + action + "</td>" +
+        "</tr>";
+    });
+
+    html += "</tbody></table>";
+    box.innerHTML = html;
+  }
+
+  loadApplicants();
+  loadDraw();
+</script>
+</body>
+</html>
+  `);
+});
+
+app.get('/api/fenix/admin/form-applicants', requireFenixAdmin, (req, res) => {
+  const data = readFenixData();
+
+  data.formApplicants = Array.isArray(data.formApplicants) ? data.formApplicants : [];
+
+  res.json({
+    ok: true,
+    applicants: data.formApplicants
+      .slice()
+      .sort((a, b) => String(a.nick || '').localeCompare(String(b.nick || '')))
+  });
+});
+
+app.post('/api/fenix/admin/form-applicants/import', requireFenixAdmin, (req, res) => {
+  const pasted = String(req.body?.text || '');
+  const parsed = fenixParseApplicantsFromPaste(pasted);
+
+  if (!parsed.length) {
+    return res.status(400).json({
+      ok: false,
+      message: 'Nenhum inscrito encontrado. Cole a planilha com o cabeçalho.'
+    });
+  }
+
+  const data = readFenixData();
+
+  data.formApplicants = Array.isArray(data.formApplicants) ? data.formApplicants : [];
+
+  const current = new Map();
+
+  for (const applicant of data.formApplicants) {
+    const key = fenixNormalizeKickNick(applicant.slug || applicant.nick).toLowerCase();
+    if (key) current.set(key, applicant);
+  }
+
+  for (const applicant of parsed) {
+    const key = applicant.slug;
+
+    if (current.has(key)) {
+      const existing = current.get(key);
+      Object.assign(existing, {
+        ...existing,
+        ...applicant,
+        ignored: Boolean(existing.ignored),
+        updatedAt: new Date().toISOString()
+      });
+    } else {
+      data.formApplicants.push(applicant);
+      current.set(key, applicant);
+    }
+  }
+
+  writeFenixData(data);
+
+  res.json({
+    ok: true,
+    imported: parsed.length,
+    total: data.formApplicants.length,
+    applicants: data.formApplicants
+  });
+});
+
+app.post('/api/fenix/admin/grade-draw/generate', requireFenixAdmin, (req, res) => {
+  const data = readFenixData();
+
+  data.formApplicants = Array.isArray(data.formApplicants) ? data.formApplicants : [];
+
+  const vacancyPerDay = Number(req.body?.vacancyPerDay || 0);
+  const draw = fenixGenerateGradeDraw(data.formApplicants, { vacancyPerDay });
+
+  data.gradeDraw = draw;
+
+  writeFenixData(data);
+
+  res.json({
+    ok: true,
+    draw
+  });
+});
+
+app.get('/api/fenix/admin/grade-draw', requireFenixAdmin, (req, res) => {
+  const data = readFenixData();
+
+  res.json({
+    ok: true,
+    draw: data.gradeDraw || null
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
