@@ -1884,9 +1884,12 @@ app.get('/admin/grade-sorteio', (req, res) => {
     <section>
       <h2>1. Importar formulário</h2>
       <p class="muted">Copie da planilha do Google Forms incluindo o cabeçalho e cole aqui.</p>
+      <label>Senha Admin:</label>
+      <input id="adminSecretBox" type="password" placeholder="Digite a senha admin da Railway">
+      <br><br>
       <textarea id="pasteBox" placeholder="Cole aqui as respostas da planilha..."></textarea>
-      <button onclick="importApplicants()">Importar inscritos</button>
-      <button class="secondary" onclick="loadApplicants()">Atualizar lista</button>
+      <button id="btnImportApplicants" type="button">Importar inscritos</button>
+      <button id="btnLoadApplicants" class="secondary" type="button">Atualizar lista</button>
       <div id="importMsg" class="muted"></div>
     </section>
 
@@ -1900,8 +1903,8 @@ app.get('/admin/grade-sorteio', (req, res) => {
       <label>Horários vagos por dia para preencher manual no grupo:</label>
       <input id="vacancyPerDay" type="number" min="0" max="24" value="3">
       <br><br>
-      <button onclick="generateDraw()">Gerar grade por sorteio</button>
-      <button class="secondary" onclick="loadDraw()">Ver último sorteio</button>
+      <button id="btnGenerateDraw" type="button">Gerar grade por sorteio</button>
+      <button id="btnLoadDraw" class="secondary" type="button">Ver último sorteio</button>
       <div id="drawMsg" class="muted"></div>
     </section>
 
@@ -1918,10 +1921,19 @@ app.get('/admin/grade-sorteio', (req, res) => {
   let adminSecret = localStorage.getItem("fenixAdminSecret") || "";
 
   function getSecret() {
-    if (!adminSecret) {
-      adminSecret = prompt("Digite a senha admin:");
-      if (adminSecret) localStorage.setItem("fenixAdminSecret", adminSecret);
+    const input = document.getElementById("adminSecretBox");
+    const typed = input ? String(input.value || "").trim() : "";
+
+    if (typed) {
+      adminSecret = typed;
+      localStorage.setItem("fenixAdminSecret", adminSecret);
+      return adminSecret;
     }
+
+    if (adminSecret && input) {
+      input.value = adminSecret;
+    }
+
     return adminSecret;
   }
 
@@ -2085,8 +2097,23 @@ app.get('/admin/grade-sorteio', (req, res) => {
     box.innerHTML = html;
   }
 
-  loadApplicants();
-  loadDraw();
+  document.addEventListener("DOMContentLoaded", () => {
+    const input = document.getElementById("adminSecretBox");
+    if (input && adminSecret) input.value = adminSecret;
+
+    const btnImport = document.getElementById("btnImportApplicants");
+    const btnLoadApplicants = document.getElementById("btnLoadApplicants");
+    const btnGenerate = document.getElementById("btnGenerateDraw");
+    const btnLoadDraw = document.getElementById("btnLoadDraw");
+
+    if (btnImport) btnImport.addEventListener("click", importApplicants);
+    if (btnLoadApplicants) btnLoadApplicants.addEventListener("click", loadApplicants);
+    if (btnGenerate) btnGenerate.addEventListener("click", generateDraw);
+    if (btnLoadDraw) btnLoadDraw.addEventListener("click", loadDraw);
+
+    loadApplicants();
+    loadDraw();
+  });
 </script>
 </body>
 </html>
