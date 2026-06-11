@@ -21,6 +21,7 @@ const KICK_SCOPES = process.env.KICK_SCOPES || 'user:read channel:read';
 const KICK_ID_URL = 'https://id.kick.com';
 const KICK_API_URL = 'https://api.kick.com/public/v1';
 
+
 app.use(express.json());
 
 // FENIX_URLENCODED_LIMIT_FINAL
@@ -961,11 +962,22 @@ app.post('/api/fenix/app/complete-cycle', (req, res) => {
     return res.status(404).json({ ok: false, message: 'Usuario Fenix nao encontrado.' });
   }
 
-  if (!kickLoggedIn && !session.kickLoggedIn && !user.kickLoggedIn) {
+  // FENIX_CYCLE_KICK_LINKED_OK_105
+  const cycleKickOk = Boolean(
+    kickLoggedIn ||
+    tabsKickLoggedIn ||
+    session.kickLoggedIn ||
+    user.kickLoggedIn ||
+    user.kickConnected ||
+    user.kickUsername ||
+    user.kickName
+  );
+
+  if (!cycleKickOk) {
     return res.status(403).json({
       ok: false,
       paid: false,
-      message: 'Kick nao logada nas telas. Pontos nao contabilizados.'
+      message: 'Kick nao vinculada ao Fenix. Pontos nao contabilizados.'
     });
   }
 
@@ -1009,7 +1021,7 @@ app.post('/api/fenix/app/complete-cycle', (req, res) => {
   const slot = getCurrentFenixSlot(data);
   const desktopSlots = fenixSlotToDesktopSlots(slot);
   const activeScreens = desktopSlots.filter((item) => item.active).length;
-  const points = activeScreens;
+  const points = 3; // ciclo completo mesmo com 0, 1, 2 ou 3 lives agendadas
 
   const now = new Date().toISOString();
 
@@ -1109,7 +1121,7 @@ app.post('/api/fenix/app/heartbeat', (req, res) => {
   const now = new Date().toISOString();
   const kickConnected = Boolean(user.kickConnected || user.kickLoggedIn || user.kickUsername || user.kickName);
   const tabsLoggedIn = Boolean(req.body?.tabsLoggedIn || req.body?.tabsKickLoggedIn);
-  const farmOk = Boolean(kickConnected && tabsLoggedIn);
+  const farmOk = Boolean(kickConnected);
 
   session.lastSeenAt = now;
   session.updatedAt = now;
@@ -1252,7 +1264,7 @@ app.get('/api/fenix/admin/online-users', requireFenixAdmin, (req, res) => {
     const kickConnected = Boolean(user.kickConnected || user.kickLoggedIn || heartbeat?.kickConnected);
     const tabsLoggedIn = Boolean(heartbeat?.tabsLoggedIn);
 
-    const farmOk = Boolean(kickConnected && ((appOnline && tabsLoggedIn) || cycleActive));
+    const farmOk = Boolean(kickConnected && (appOnline || cycleActive));
 
     let farmStatus = 'Offline';
 

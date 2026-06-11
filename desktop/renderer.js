@@ -1,5 +1,6 @@
 ﻿const CONFIG = {
-  adminApi: "https://fenix-kick-app-production.up.railway.app",
+  // FENIX_LOCAL_API_OVERRIDE_105
+  adminApi: localStorage.getItem("fenixApiOverride") || "https://fenix-kick-app-production.up.railway.app",
   fallbackProfile: "GokuuMods",
   refreshSeconds: 60,
   cycleSeconds: 600,
@@ -1653,7 +1654,7 @@ function fenixOpenKickHomeWhenNoLive() {
     }
 
     if (typeof setWarning === "function") {
-      setWarning("Sem live agendada: abrindo kick.com nas telas para login. Pontos so contam quando tiver live agendada.");
+      setWarning("Sem live agendada: abrindo kick.com nas telas. O app continua farmando normalmente.");
     }
   } catch (error) {
     console.error("Erro ao abrir kick.com sem live:", error);
@@ -1715,7 +1716,7 @@ function showTabsLoginNotice() {
       '<div class="fenix-tabs-login-box">' +
         '<h2>Login Kick nas abas</h2>' +
         '<p>Sua conta Kick ja esta vinculada ao Fenix.</p>' +
-        '<p>Agora entre na Kick dentro das abas para liberar os pontos.</p>' +
+        '<p>Se houver live agendada, entre na Kick dentro das abas. Sem live agendada, o app continua farmando normalmente.</p>' +
         '<button id="fenixTabsNoticeOk">Entendi</button>' +
       '</div>';
 
@@ -2423,3 +2424,159 @@ document.addEventListener("DOMContentLoaded", () => {
 
   setInterval(fenixRepairKickHomeIfNeeded, 60000);
 });
+
+
+/* FENIX_STATUS_ABAS_REGRAS_105 */
+function fenix105KickLinked() {
+  try {
+    return Boolean(
+      kickLoggedIn ||
+      fenixSession?.user?.kickConnected ||
+      fenixSession?.user?.kickLoggedIn ||
+      fenixSession?.user?.kickUsername ||
+      fenixSession?.user?.kickName
+    );
+  } catch {
+    return false;
+  }
+}
+
+function fenix105ScheduledLiveSlots() {
+  try {
+    if (!Array.isArray(currentSlots)) return [];
+
+    return currentSlots.filter((slot) => {
+      const active = slot?.active !== false;
+      const maintenance = Boolean(slot?.maintenance);
+      const channel = String(slot?.channel || slot?.screenName || "").trim();
+      const url = String(slot?.url || "").trim();
+
+      return active && !maintenance && Boolean(channel || url);
+    });
+  } catch {
+    return [];
+  }
+}
+
+function fenix105SetTabsVisual(mode, text) {
+  try {
+    let dot = document.getElementById("kickTabsDot");
+    let label = document.getElementById("kickTabsStatus");
+
+    if (!dot || !label) {
+      const leftTop = document.querySelector(".left-top");
+      if (!leftTop) return;
+
+      dot = document.createElement("span");
+      dot.id = "kickTabsDot";
+      dot.className = "dot bad";
+
+      label = document.createElement("span");
+      label.id = "kickTabsStatus";
+
+      leftTop.appendChild(dot);
+      leftTop.appendChild(label);
+    }
+
+    dot.classList.toggle("ok", mode === "ok");
+    dot.classList.toggle("bad", mode === "bad");
+
+    if (mode === "warn") {
+      dot.classList.remove("ok");
+      dot.classList.remove("bad");
+      dot.style.background = "#f5b22a";
+      label.style.color = "#f5b22a";
+    } else {
+      dot.style.background = "";
+      label.style.color = mode === "ok" ? "#38ff74" : "#ff4a4a";
+    }
+
+    label.textContent = text;
+  } catch {}
+}
+
+async function fenix105AnyScheduledTabLogged() {
+  const slots = fenix105ScheduledLiveSlots();
+
+  for (const slot of slots) {
+    try {
+      const view = document.getElementById("view" + slot.id);
+      if (!view) continue;
+
+      const logged = await checkOneKickTabLogged(view);
+
+      if (logged) {
+        return true;
+      }
+    } catch {}
+  }
+
+  return false;
+}
+
+const fenix105OriginalUpdateKickTabsStatus =
+  typeof updateKickTabsStatus === "function" ? updateKickTabsStatus : null;
+
+updateKickTabsStatus = function(logged) {
+  const kickLinked = fenix105KickLinked();
+  const scheduledLives = fenix105ScheduledLiveSlots();
+
+  if (!kickLinked) {
+    kickTabsLoggedIn = false;
+    fenix105SetTabsVisual("bad", "SEM KICK");
+    return;
+  }
+
+  if (scheduledLives.length === 0) {
+    kickTabsLoggedIn = true;
+    fenix105SetTabsVisual("warn", "SEM LIVE AGENDADA");
+    return;
+  }
+
+  if (logged) {
+    kickTabsLoggedIn = true;
+    fenix105SetTabsVisual("ok", "ABAS OK");
+    return;
+  }
+
+  kickTabsLoggedIn = false;
+  fenix105SetTabsVisual("bad", "LOGIN KICK NAS ABAS");
+};
+
+const fenix105OriginalCheckKickTabsLoggedIn =
+  typeof checkKickTabsLoggedIn === "function" ? checkKickTabsLoggedIn : null;
+
+checkKickTabsLoggedIn = async function() {
+  const kickLinked = fenix105KickLinked();
+  const scheduledLives = fenix105ScheduledLiveSlots();
+
+  if (!kickLinked) {
+    kickTabsLoggedIn = false;
+    fenix105SetTabsVisual("bad", "SEM KICK");
+    setWarning("Conecte sua Kick ao Fenix para liberar o farm.");
+    return false;
+  }
+
+  if (scheduledLives.length === 0) {
+    kickTabsLoggedIn = true;
+    fenix105SetTabsVisual("warn", "SEM LIVE AGENDADA");
+    setWarning("Sem live agendada neste horario. O app continua farmando normalmente.");
+    return true;
+  }
+
+  const logged = await fenix105AnyScheduledTabLogged();
+
+  if (logged) {
+    kickTabsLoggedIn = true;
+    fenix105SetTabsVisual("ok", "ABAS OK");
+    setWarning("Live agendada carregada. Abas OK para farm.");
+    return true;
+  }
+
+  kickTabsLoggedIn = false;
+  fenix105SetTabsVisual("bad", "LOGIN KICK NAS ABAS");
+  setWarning("Existe live agendada, mas a Kick nao foi detectada logada dentro das abas.");
+  return false;
+};
+
+
