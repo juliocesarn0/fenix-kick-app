@@ -43,6 +43,38 @@ function createWindow() {
   fenixMainWindowForUpdate = mainWindow;
   mainWindow.loadFile(path.join(__dirname, "index.html"));
 
+// FENIX_BACKGROUND_MODE_105
+  if (!global.fenixBackgroundMode105Registered) {
+    global.fenixBackgroundMode105Registered = true;
+
+    ipcMain.handle("fenix:background-mode-105", async () => {
+      try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.setAlwaysOnTop(false);
+          mainWindow.showInactive();
+
+          setTimeout(() => {
+            try {
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.blur();
+              }
+            } catch {}
+          }, 120);
+        }
+
+        return {
+          ok: true,
+          message: "Modo Segundo Plano ativado. O app continua aberto para manter as lives rodando."
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          message: error?.message || "Erro ao ativar Modo Segundo Plano."
+        };
+      }
+    });
+  }
+
   // FENIX_MAXIMIZAR_JANELA
   mainWindow.once("ready-to-show", () => {
     mainWindow.maximize();

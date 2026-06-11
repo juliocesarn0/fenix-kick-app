@@ -2580,3 +2580,73 @@ checkKickTabsLoggedIn = async function() {
 };
 
 
+
+
+// FENIX_BACKGROUND_MODE_BUTTON_105
+(function fenixBackgroundModeButton105() {
+  function createBackgroundButton() {
+    if (document.getElementById("fenixBackgroundMode105")) return;
+
+    const button = document.createElement("button");
+    button.id = "fenixBackgroundMode105";
+    button.type = "button";
+    button.textContent = "🌙 Segundo Plano";
+    button.title = "Mantém o app aberto e tira o foco sem minimizar.";
+
+    button.style.position = "fixed";
+    button.style.right = "14px";
+    button.style.top = "25px";
+    button.style.zIndex = "999999";
+    button.style.border = "1px solid rgba(245,178,42,.75)";
+    button.style.background = "linear-gradient(135deg, rgba(245,178,42,.95), rgba(125,80,12,.95))";
+    button.style.color = "#080808";
+    button.style.fontWeight = "900";
+    button.style.fontSize = "12px";
+    button.style.borderRadius = "999px";
+    button.style.padding = "7px 10px";
+    button.style.cursor = "pointer";
+    button.style.boxShadow = "0 10px 28px rgba(0,0,0,.45)";
+    button.style.userSelect = "none";
+
+    button.addEventListener("mouseenter", () => {
+      button.style.transform = "translateY(-1px)";
+    });
+
+    button.addEventListener("mouseleave", () => {
+      button.style.transform = "translateY(0)";
+    });
+
+    button.addEventListener("click", async () => {
+      try {
+        button.disabled = true;
+        button.textContent = "🌙 Ativando...";
+
+        const result = await window.fenixBackgroundMode105?.activate?.();
+
+        if (typeof setWarning === "function") {
+          setWarning(result?.message || "Modo Segundo Plano ativo. Deixe outro programa por cima do Fenix.");
+        }
+
+        button.textContent = "🌙 Segundo Plano";
+        button.disabled = false;
+      } catch (error) {
+        if (typeof setWarning === "function") {
+          setWarning("Nao foi possivel ativar o Modo Segundo Plano.");
+        }
+
+        button.textContent = "🌙 Segundo Plano";
+        button.disabled = false;
+      }
+    });
+
+    document.body.appendChild(button);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", createBackgroundButton);
+  } else {
+    createBackgroundButton();
+  }
+})();
+
+

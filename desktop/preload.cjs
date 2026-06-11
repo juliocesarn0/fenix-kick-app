@@ -27,3 +27,13 @@ try {
 } catch (error) {
   console.error("Erro preload auto-update:", error);
 }
+
+
+// FENIX_BACKGROUND_MODE_PRELOAD_105
+try {
+  const { contextBridge, ipcRenderer } = require("electron");
+
+  contextBridge.exposeInMainWorld("fenixBackgroundMode105", {
+    activate: () => ipcRenderer.invoke("fenix:background-mode-105")
+  });
+} catch {}
