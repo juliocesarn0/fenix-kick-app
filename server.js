@@ -297,7 +297,11 @@ const FENIX_ADMIN_SECRET = process.env.FENIX_ADMIN_SECRET || '';
 const FENIX_MIN_CYCLE_INTERVAL_MS = Number(process.env.FENIX_MIN_CYCLE_INTERVAL_MS || 1000 * 60 * 9);
 const FENIX_DATA_DIR = process.env.FENIX_DATA_DIR || (fs.existsSync('/data') ? '/data' : path.join(__dirname, 'backend', 'data'));
 const FENIX_DATA_FILE = path.join(FENIX_DATA_DIR, 'fenix-data.json');
+const FENIX_BACKUP_DIR = path.join(FENIX_DATA_DIR, 'backups');
+const FENIX_MAX_BACKUPS = Number(process.env.FENIX_MAX_BACKUPS || 200);
+let FENIX_LAST_BACKUP_AT = 0;
 console.log('Fenix data file:', FENIX_DATA_FILE);
+console.log('Fenix backup dir:', FENIX_BACKUP_DIR);
 
 fs.mkdirSync(FENIX_DATA_DIR, { recursive: true });
 
@@ -321,33 +325,197 @@ function createDefaultFenixData() {
   };
 }
 
+/* FENIX_DATA_PROTECTION_20260612 */
+function normalizeFenixDataShape(parsed) {
+  const base = parsed && typeof parsed === 'object' ? parsed : {};
+
+  return {
+    ...base,
+    users: Array.isArray(base.users) ? base.users : [],
+    sessions: Array.isArray(base.sessions) ? base.sessions : [],
+    schedule: Array.isArray(base.schedule) ? base.schedule : [],
+    notices: Array.isArray(base.notices) ? base.notices : [],
+    cycles: Array.isArray(base.cycles) ? base.cycles : [],
+    deviceLocks: Array.isArray(base.deviceLocks) ? base.deviceLocks : [],
+    kickLocks: Array.isArray(base.kickLocks) ? base.kickLocks : [],
+    farmHeartbeats: Array.isArray(base.farmHeartbeats) ? base.farmHeartbeats : []
+  };
+}
+
+function fenixBackupTimestamp() {
+  return new Date().toISOString().replace(/[:.]/g, '-');
+}
+
+function fenixSafeReadJsonFile(file) {
+  try {
+    if (!fs.existsSync(file)) return null;
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function cleanupFenixBackups() {
+  try {
+    fs.mkdirSync(FENIX_BACKUP_DIR, { recursive: true });
+
+    const files = fs.readdirSync(FENIX_BACKUP_DIR)
+      .filter((name) => name.startsWith('fenix-data-') && name.endsWith('.json'))
+      .sort();
+
+    while (files.length > FENIX_MAX_BACKUPS) {
+      const oldFile = files.shift();
+      fs.unlinkSync(path.join(FENIX_BACKUP_DIR, oldFile));
+    }
+  } catch (error) {
+    console.error('Erro limpando backups Fenix:', error);
+  }
+}
+
+function createFenixDataBackup(reason = 'auto', force = false) {
+  try {
+    if (!fs.existsSync(FENIX_DATA_FILE)) return null;
+
+    const now = Date.now();
+
+    if (!force && now - FENIX_LAST_BACKUP_AT < 1000 * 60 * 5) {
+      return null;
+    }
+
+    const currentRaw = fs.readFileSync(FENIX_DATA_FILE, 'utf8');
+    JSON.parse(currentRaw);
+
+    fs.mkdirSync(FENIX_BACKUP_DIR, { recursive: true });
+
+    const safeReason = String(reason || 'auto')
+      .replace(/[^a-z0-9_-]/gi, '-')
+      .slice(0, 40);
+
+    const backupFile = path.join(
+      FENIX_BACKUP_DIR,
+      `fenix-data-${fenixBackupTimestamp()}-${safeReason}.json`
+    );
+
+    fs.writeFileSync(backupFile, currentRaw, 'utf8');
+    FENIX_LAST_BACKUP_AT = now;
+
+    cleanupFenixBackups();
+
+    console.log('Backup Fenix criado:', backupFile);
+    return backupFile;
+  } catch (error) {
+    console.error('Erro criando backup Fenix:', error);
+    return null;
+  }
+}
+
+function readLatestFenixBackup() {
+  try {
+    if (!fs.existsSync(FENIX_BACKUP_DIR)) return null;
+
+    const files = fs.readdirSync(FENIX_BACKUP_DIR)
+      .filter((name) => name.startsWith('fenix-data-') && name.endsWith('.json'))
+      .sort()
+      .reverse();
+
+    for (const name of files) {
+      const file = path.join(FENIX_BACKUP_DIR, name);
+      const parsed = fenixSafeReadJsonFile(file);
+
+      if (parsed) {
+        console.log('Fenix recuperado do backup:', file);
+        return normalizeFenixDataShape(parsed);
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Erro lendo backups Fenix:', error);
+    return null;
+  }
+}
+
 function readFenixData() {
   try {
     if (!fs.existsSync(FENIX_DATA_FILE)) {
       const initial = createDefaultFenixData();
       fs.writeFileSync(FENIX_DATA_FILE, JSON.stringify(initial, null, 2), 'utf8');
+      createFenixDataBackup('initial', true);
       return initial;
     }
 
     const parsed = JSON.parse(fs.readFileSync(FENIX_DATA_FILE, 'utf8'));
-    return {
-      users: Array.isArray(parsed.users) ? parsed.users : [],
-      sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
-      schedule: Array.isArray(parsed.schedule) ? parsed.schedule : [],
-      notices: Array.isArray(parsed.notices) ? parsed.notices : [],
-      cycles: Array.isArray(parsed.cycles) ? parsed.cycles : [],
-      deviceLocks: Array.isArray(parsed.deviceLocks) ? parsed.deviceLocks : [],
-      kickLocks: Array.isArray(parsed.kickLocks) ? parsed.kickLocks : []
-    };
+    return normalizeFenixDataShape(parsed);
   } catch (error) {
     console.error('Erro lendo fenix-data.json:', error);
-    return createDefaultFenixData();
+
+    const backup = readLatestFenixBackup();
+
+    if (backup) {
+      return backup;
+    }
+
+    throw error;
   }
 }
 
 function writeFenixData(data) {
-  fs.writeFileSync(FENIX_DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+  const nextData = normalizeFenixDataShape(data);
+  const allowDangerousShrink = nextData.__allowDangerousShrink === true;
+
+  if (Object.prototype.hasOwnProperty.call(nextData, '__allowDangerousShrink')) {
+    delete nextData.__allowDangerousShrink;
+  }
+
+  const current = fenixSafeReadJsonFile(FENIX_DATA_FILE);
+  const currentData = current ? normalizeFenixDataShape(current) : null;
+
+  if (currentData && !allowDangerousShrink) {
+    const currentUsers = currentData.users.length;
+    const nextUsers = nextData.users.length;
+    const currentSchedule = currentData.schedule.length;
+    const nextSchedule = nextData.schedule.length;
+
+    if (currentUsers > 0 && nextUsers < currentUsers) {
+      createFenixDataBackup('blocked-users-shrink', true);
+
+      throw new Error(
+        `PROTECAO FENIX: salvamento bloqueado porque reduziria contas de ${currentUsers} para ${nextUsers}.`
+      );
+    }
+
+    if (currentSchedule > 0 && nextSchedule === 0) {
+      createFenixDataBackup('blocked-schedule-empty', true);
+
+      throw new Error(
+        `PROTECAO FENIX: salvamento bloqueado porque zeraria a grade de ${currentSchedule} para 0.`
+      );
+    }
+  }
+
+  const forceBackup =
+    currentData &&
+    (
+      nextData.users.length !== currentData.users.length ||
+      nextData.schedule.length !== currentData.schedule.length ||
+      nextData.cycles.length < currentData.cycles.length
+    );
+
+  createFenixDataBackup('before-write', Boolean(forceBackup));
+
+  fs.mkdirSync(FENIX_DATA_DIR, { recursive: true });
+
+  const tempFile = `${FENIX_DATA_FILE}.tmp-${process.pid}-${Date.now()}`;
+  const json = JSON.stringify(nextData, null, 2);
+
+  JSON.parse(json);
+
+  fs.writeFileSync(tempFile, json, 'utf8');
+  JSON.parse(fs.readFileSync(tempFile, 'utf8'));
+
+  fs.renameSync(tempFile, FENIX_DATA_FILE);
 }
+/* FIM_FENIX_DATA_PROTECTION_20260612 */
 
 function hashFenixPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
   const hash = crypto.pbkdf2Sync(String(password || ''), salt, 120000, 64, 'sha512').toString('hex');
@@ -3511,6 +3679,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
