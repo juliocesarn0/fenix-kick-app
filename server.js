@@ -1320,19 +1320,39 @@ app.post('/api/fenix/app/heartbeat', (req, res) => {
       String(item.username || '').toLowerCase() === String(user.username || '').toLowerCase();
   });
 
-  if (existingIndex >= 0) {
-    data.farmHeartbeats[existingIndex] = {
-      ...data.farmHeartbeats[existingIndex],
-      ...heartbeat
-    };
-  } else {
-    data.farmHeartbeats.push(heartbeat);
-  }
+  const existingHeartbeat = existingIndex >= 0 ? data.farmHeartbeats[existingIndex] : null;
+  const previousSeenMsRaw = existingHeartbeat?.lastSeenAt ? new Date(existingHeartbeat.lastSeenAt).getTime() : 0;
+  const previousSeenMs = Number.isFinite(previousSeenMsRaw) ? previousSeenMsRaw : 0;
+  const nowMs = Date.now();
 
-  writeFenixData(data);
+  const changedImportant =
+    !existingHeartbeat ||
+    Boolean(existingHeartbeat.kickConnected) !== kickConnected ||
+    Boolean(existingHeartbeat.tabsLoggedIn) !== tabsLoggedIn ||
+    Boolean(existingHeartbeat.farmOk) !== farmOk ||
+    String(existingHeartbeat.sessionId || '') !== String(heartbeat.sessionId || '');
+
+  const shouldSaveHeartbeat =
+    changedImportant ||
+    !previousSeenMs ||
+    nowMs - previousSeenMs >= 60000;
+
+  if (shouldSaveHeartbeat) {
+    if (existingIndex >= 0) {
+      data.farmHeartbeats[existingIndex] = {
+        ...data.farmHeartbeats[existingIndex],
+        ...heartbeat
+      };
+    } else {
+      data.farmHeartbeats.push(heartbeat);
+    }
+
+    writeFenixData(data);
+  }
 
   return res.json({
     ok: true,
+    saved: shouldSaveHeartbeat,
     heartbeat
   });
 });
