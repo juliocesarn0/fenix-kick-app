@@ -302,6 +302,7 @@ const FENIX_MAX_BACKUPS = Number(process.env.FENIX_MAX_BACKUPS || 200);
 let FENIX_LAST_BACKUP_AT = 0;
 console.log('Fenix data file:', FENIX_DATA_FILE);
 console.log('Fenix backup dir:', FENIX_BACKUP_DIR);
+const FENIX_MEMORY_HEARTBEATS = new Map();
 
 fs.mkdirSync(FENIX_DATA_DIR, { recursive: true });
 
@@ -1320,39 +1321,17 @@ app.post('/api/fenix/app/heartbeat', (req, res) => {
       String(item.username || '').toLowerCase() === String(user.username || '').toLowerCase();
   });
 
-  const existingHeartbeat = existingIndex >= 0 ? data.farmHeartbeats[existingIndex] : null;
-  const previousSeenMsRaw = existingHeartbeat?.lastSeenAt ? new Date(existingHeartbeat.lastSeenAt).getTime() : 0;
-  const previousSeenMs = Number.isFinite(previousSeenMsRaw) ? previousSeenMsRaw : 0;
-  const nowMs = Date.now();
+  const heartbeatKey = String(user.id || user.username || '').toLowerCase();
 
-  const changedImportant =
-    !existingHeartbeat ||
-    Boolean(existingHeartbeat.kickConnected) !== kickConnected ||
-    Boolean(existingHeartbeat.tabsLoggedIn) !== tabsLoggedIn ||
-    Boolean(existingHeartbeat.farmOk) !== farmOk ||
-    String(existingHeartbeat.sessionId || '') !== String(heartbeat.sessionId || '');
-
-  const shouldSaveHeartbeat =
-    changedImportant ||
-    !previousSeenMs ||
-    nowMs - previousSeenMs >= 60000;
-
-  if (shouldSaveHeartbeat) {
-    if (existingIndex >= 0) {
-      data.farmHeartbeats[existingIndex] = {
-        ...data.farmHeartbeats[existingIndex],
-        ...heartbeat
-      };
-    } else {
-      data.farmHeartbeats.push(heartbeat);
-    }
-
-    writeFenixData(data);
+  if (heartbeatKey) {
+    FENIX_MEMORY_HEARTBEATS.set(heartbeatKey, heartbeat);
+    FENIX_MEMORY_HEARTBEATS.set(String(user.username || '').toLowerCase(), heartbeat);
   }
 
   return res.json({
     ok: true,
-    saved: shouldSaveHeartbeat,
+    saved: false,
+    memoryOnly: true,
     heartbeat
   });
 });
@@ -1381,6 +1360,15 @@ app.get('/api/fenix/admin/online-users', requireFenixAdmin, (req, res) => {
 
   function findHeartbeat(user) {
     const username = String(user.username || '').toLowerCase();
+    const userIdKey = String(user.id || '').toLowerCase();
+
+    const memoryHeartbeat =
+      FENIX_MEMORY_HEARTBEATS.get(userIdKey) ||
+      FENIX_MEMORY_HEARTBEATS.get(username);
+
+    if (memoryHeartbeat) {
+      return memoryHeartbeat;
+    }
 
     return data.farmHeartbeats.find((item) => {
       return item.userId === user.id ||
