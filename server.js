@@ -1016,10 +1016,10 @@ app.get('/api/fenix/app/me', (req, res) => {
   user.isOnline = true;
   user.lastSeenAt = new Date().toISOString();
 
-  writeFenixData(data);
 
   res.json({
     ok: true,
+    memoryOnly: true,
     user: publicFenixUser(user)
   });
 });
