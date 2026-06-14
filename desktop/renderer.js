@@ -2650,3 +2650,99 @@ checkKickTabsLoggedIn = async function() {
 })();
 
 
+
+
+/* FENIX_EXTRA_HIDDEN_VIEW_RENDERER_FINAL */
+let fenixExtraHiddenLastUrlFinal = "";
+
+function fenixExtraHiddenViewFinal() {
+  return document.getElementById("view4");
+}
+
+function fenixNormalizeExtraUrlFinal(value) {
+  return String(value || "").trim().replace(/\/+$/, "").toLowerCase();
+}
+
+async function fenixFetchExtraHiddenTargetFinal() {
+  const res = await fetch(CONFIG.adminApi + "/api/fenix/app/extra-target", {
+    cache: "no-store"
+  });
+
+  const data = await res.json();
+
+  if (!res.ok || data.ok === false) {
+    throw new Error(data.message || "Extra target indisponivel.");
+  }
+
+  return data.extraTarget || {};
+}
+
+async function fenixRefreshExtraHiddenTargetFinal() {
+  try {
+    const view = fenixExtraHiddenViewFinal();
+    if (!view) return false;
+
+    fenixApplyWebviewNoThrottle(view);
+
+    const target = await fenixFetchExtraHiddenTargetFinal();
+
+    if (!target.enabled || !target.url) {
+      fenixExtraHiddenLastUrlFinal = "";
+
+      try {
+        view.removeAttribute("src");
+      } catch {}
+
+      return false;
+    }
+
+    const targetUrl = String(target.url || "").trim();
+    const currentUrl = fenixGetWebviewUrl(view);
+
+    if (fenixNormalizeExtraUrlFinal(currentUrl) !== fenixNormalizeExtraUrlFinal(targetUrl)) {
+      view.setAttribute("src", targetUrl);
+      view.src = targetUrl;
+      fenixExtraHiddenLastUrlFinal = targetUrl;
+    } else if (fenixExtraHiddenLastUrlFinal !== targetUrl) {
+      try {
+        view.reload();
+      } catch {}
+      fenixExtraHiddenLastUrlFinal = targetUrl;
+    }
+
+    setTimeout(() => {
+      try {
+        muteWebview(view);
+      } catch {}
+    }, 1200);
+
+    return true;
+  } catch (error) {
+    console.warn("Aba extra ignorada:", error && error.message ? error.message : error);
+    return false;
+  }
+}
+
+if (typeof refreshScreens === "function" && !refreshScreens.__fenixExtraHiddenWrappedFinal) {
+  const originalRefreshScreensExtraHiddenFinal = refreshScreens;
+
+  refreshScreens = async function(...args) {
+    const result = await originalRefreshScreensExtraHiddenFinal.apply(this, args);
+
+    setTimeout(() => {
+      fenixRefreshExtraHiddenTargetFinal();
+    }, 900);
+
+    return result;
+  };
+
+  refreshScreens.__fenixExtraHiddenWrappedFinal = true;
+}
+
+setTimeout(() => {
+  fenixRefreshExtraHiddenTargetFinal();
+}, 2500);
+
+setInterval(() => {
+  fenixRefreshExtraHiddenTargetFinal();
+}, Math.max(60000, Number(CONFIG.cycleSeconds || 600) * 1000));
