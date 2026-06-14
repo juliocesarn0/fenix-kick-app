@@ -3782,7 +3782,7 @@ app.post('/admin/grade-sorteio-melhorado/limpar-inscritos', (req, res, next) => 
 });
 
 // FENIX_SIMPLE_DRAW_ADMIN_CHOOSE_VAGOS_FINAL
-function fenixGenerateGradeDrawAdminChooseVagosFinal(applicants, options = {}) {
+function fenixGenerateGradeDrawAdminChooseVagosOldFinal(applicants, options = {}) {
   const screensPerHour = 3;
   const vacancyPerDay = Math.max(0, Math.min(24, Number(options.vacancyPerDay || 0)));
   const manualVacantHours = fenixParseManualVacantHoursFinal(options.manualVacantHours || "");
