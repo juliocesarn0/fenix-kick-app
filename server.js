@@ -2977,7 +2977,7 @@ function fenixRenderGradeSorteioSimplesPage({ applicants = [], draw = null, mess
     h1 { margin:0; color:#f3c451; }
     main { padding:18px; display:grid; gap:16px; }
     section { background:#111; border:1px solid #30240a; border-radius:14px; padding:16px; }
-    input, textarea { width:100%; box-sizing:border-box; background:#050505; color:#fff; border:1px solid #49370e; border-radius:10px; padding:10px; }
+    input, textarea, select { width:100%; box-sizing:border-box; background:#050505; color:#fff; border:1px solid #49370e; border-radius:10px; padding:10px; }
     textarea { min-height:170px; }
     button { background:#d6a82d; color:#090909; border:0; border-radius:10px; padding:11px 15px; font-weight:900; cursor:pointer; margin-top:10px; }
     table { width:100%; border-collapse:collapse; font-size:13px; margin-top:12px; }
@@ -3012,7 +3012,36 @@ function fenixRenderGradeSorteioSimplesPage({ applicants = [], draw = null, mess
   </section>
 
   <section>
-    <h2>2. Ver inscritos salvos</h2>
+    <h2>2. Importar grade pronta do Excel</h2>
+    <div class="muted">
+      Cole aqui a grade que vem do Excel. Ela vira rascunho e depois voce usa o botao "Aplicar essa grade no app".
+    </div>
+    <form method="POST" action="/admin/grade-sorteio-simples/importar-excel">
+      <label>Senha Admin:</label>
+      <input name="adminSecret" type="password" placeholder="Digite a senha admin da Railway" required>
+      <br><br>
+
+      <label>Importar:</label>
+      <select name="importScope">
+        <option value="semana">Semana toda</option>
+        <option value="segunda">Apenas Segunda</option>
+        <option value="terca">Apenas Terca</option>
+        <option value="quarta">Apenas Quarta</option>
+        <option value="quinta">Apenas Quinta</option>
+        <option value="sexta">Apenas Sexta</option>
+        <option value="sabado">Apenas Sabado</option>
+      </select>
+      <br><br>
+
+      <label>Grade copiada do Excel:</label>
+      <textarea name="excelText" placeholder="Cole aqui a grade do Excel com Horarios, Segunda, Terca, Quarta, Quinta, Sexta e Sabado"></textarea>
+
+      <button type="submit">Importar grade do Excel</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>3. Ver inscritos salvos</h2>
     <form method="POST" action="/admin/grade-sorteio-simples/ver">
       <label>Senha Admin:</label>
       <input name="adminSecret" type="password" placeholder="Digite a senha admin da Railway" required>
@@ -3302,6 +3331,220 @@ app.post('/admin/grade-sorteio-simples/gerar', fenixSimpleAdminAuth, (req, res) 
     message: 'Sorteio gerado. Inscritos: ' + applicants.length + ' | Vagos: ' + draw.summary.totalVacantHours + ' | Max semana: ' + draw.maxWeekly + ' | Max dia: ' + draw.maxDaily
   }));
 });
+
+
+// FENIX_IMPORTAR_GRADE_EXCEL_PRONTA_FINAL
+function fenixExcelDayMapFinal() {
+  return [
+    { key: 'segunda', label: 'Segunda' },
+    { key: 'terca', label: 'Terça' },
+    { key: 'quarta', label: 'Quarta' },
+    { key: 'quinta', label: 'Quinta' },
+    { key: 'sexta', label: 'Sexta' },
+    { key: 'sabado', label: 'Sábado' }
+  ];
+}
+
+function fenixNormalizeExcelDayFinal(value) {
+  const text = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
+  const map = {
+    segunda: 'segunda',
+    seg: 'segunda',
+    terca: 'terca',
+    ter: 'terca',
+    quarta: 'quarta',
+    qua: 'quarta',
+    quinta: 'quinta',
+    qui: 'quinta',
+    sexta: 'sexta',
+    sex: 'sexta',
+    sabado: 'sabado',
+    sab: 'sabado'
+  };
+
+  return map[text] || '';
+}
+
+function fenixNormalizeExcelHourFinal(value) {
+  const text = String(value || '').trim();
+  const match = text.match(/(\d{1,2})\s*:\s*00/);
+
+  if (!match) return '';
+
+  const hour = Math.max(0, Math.min(23, Number(match[1] || 0)));
+  return String(hour).padStart(2, '0') + ':00';
+}
+
+function fenixScreenFromExcelNameFinal(value) {
+  const nick = String(value || '').trim();
+
+  if (!nick) {
+    return { status: 'MANUAL', nick: '' };
+  }
+
+  const upper = nick.toUpperCase();
+
+  if (upper === 'VAGO') {
+    return { status: 'VAGO', nick: '' };
+  }
+
+  if (upper === 'PREENCHER MANUAL') {
+    return { status: 'MANUAL', nick: '' };
+  }
+
+  return {
+    status: 'OK',
+    nick,
+    slug: fenixNormalizeKickNick(nick)
+  };
+}
+
+function fenixBuildExcelDrawFinal(rows, sourceLabel) {
+  const dayLabelMap = {};
+  for (const day of fenixExcelDayMapFinal()) {
+    dayLabelMap[day.key] = day.label;
+  }
+
+  rows.sort((a, b) => {
+    const da = fenixDayOffsetFromKeyFinal(a.day);
+    const db = fenixDayOffsetFromKeyFinal(b.day);
+    if (da !== db) return da - db;
+    return String(a.hourLabel || '').localeCompare(String(b.hourLabel || ''));
+  });
+
+  let ok = 0;
+  let vago = 0;
+  let manual = 0;
+
+  for (const row of rows) {
+    row.dayLabel = dayLabelMap[row.day] || row.day;
+    for (const screen of row.screens || []) {
+      if (screen.status === 'OK') ok += 1;
+      else if (screen.status === 'VAGO') vago += 1;
+      else manual += 1;
+    }
+  }
+
+  return {
+    id: 'excel-' + Date.now(),
+    mode: 'excel',
+    source: sourceLabel || 'grade-excel',
+    createdAt: new Date().toISOString(),
+    maxWeekly: 0,
+    maxDaily: 0,
+    summary: {
+      applicants: 0,
+      filled: ok,
+      totalVacantHours: vago,
+      manualFill: manual,
+      totalRows: rows.length
+    },
+    rows
+  };
+}
+
+function fenixParseExcelReadyScheduleFinal(text, importScope) {
+  const pasted = String(text || '').replace(/\r/g, '').trim();
+
+  if (!pasted) return [];
+
+  const scope = String(importScope || 'semana').toLowerCase();
+  const days = fenixExcelDayMapFinal();
+  const rows = [];
+  const seen = new Set();
+
+  function allowDay(dayKey) {
+    return scope === 'semana' || dayKey === scope;
+  }
+
+  function addRow(dayKey, hourLabel, screen1, screen2, screen3) {
+    if (!dayKey || !allowDay(dayKey) || !/^\d{2}:00$/.test(hourLabel)) return;
+
+    const key = dayKey + '|' + hourLabel;
+
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    rows.push({
+      day: dayKey,
+      dayLabel: '',
+      hourLabel,
+      screens: [
+        fenixScreenFromExcelNameFinal(screen1),
+        fenixScreenFromExcelNameFinal(screen2),
+        fenixScreenFromExcelNameFinal(screen3)
+      ]
+    });
+  }
+
+  for (const rawLine of pasted.split('\n')) {
+    const line = String(rawLine || '').trim();
+    if (!line) continue;
+
+    const cols = rawLine.split('\t').map((item) => String(item || '').trim());
+    const dayKey = fenixNormalizeExcelDayFinal(cols[0]);
+    const hourLabel = fenixNormalizeExcelHourFinal(cols[1]);
+
+    if (dayKey && hourLabel && cols.length >= 5) {
+      addRow(dayKey, hourLabel, cols[2], cols[3], cols[4]);
+      continue;
+    }
+
+    const firstHour = fenixNormalizeExcelHourFinal(cols[0]);
+
+    if (firstHour && cols.length >= 19) {
+      for (let dayIndex = 0; dayIndex < days.length; dayIndex += 1) {
+        const day = days[dayIndex];
+        const start = 1 + dayIndex * 3;
+
+        addRow(day.key, firstHour, cols[start], cols[start + 1], cols[start + 2]);
+      }
+    }
+  }
+
+  return rows;
+}
+
+app.post('/admin/grade-sorteio-simples/importar-excel', fenixSimpleAdminAuth, (req, res) => {
+  try {
+    const applicants = fenixReadFormApplicantsFileFinal();
+    const pasted = String(req.body?.excelText || '');
+    const importScope = String(req.body?.importScope || 'semana').toLowerCase();
+
+    const rows = fenixParseExcelReadyScheduleFinal(pasted, importScope);
+
+    if (!rows.length) {
+      return res.type('html').send(fenixRenderGradeSorteioSimplesPage({
+        applicants,
+        draw: fenixReadGradeDrawFileFinal(),
+        message: 'Erro: nenhuma linha da grade foi encontrada. Cole a grade do Excel com Horarios + Tela 1, Tela 2 e Tela 3.'
+      }));
+    }
+
+    const draw = fenixBuildExcelDrawFinal(rows, 'grade-excel-' + importScope);
+    fenixSaveGradeDrawFileFinal(draw);
+
+    return res.type('html').send(fenixRenderGradeSorteioSimplesPage({
+      applicants,
+      draw,
+      message: 'Grade do Excel importada como rascunho. Linhas: ' + rows.length + ' | Escopo: ' + importScope + '. Agora confira e clique em Aplicar essa grade no app.'
+    }));
+  } catch (error) {
+    console.error('ERRO IMPORTAR GRADE EXCEL:', error);
+
+    return res.type('html').send(fenixRenderGradeSorteioSimplesPage({
+      applicants: fenixReadFormApplicantsFileFinal(),
+      draw: fenixReadGradeDrawFileFinal(),
+      message: 'Erro ao importar grade do Excel: ' + String(error.message || error)
+    }));
+  }
+});
+
 
 // FENIX_GRADE_SORTEIO_MELHORIAS_FINAL
 function fenixParseManualVacantHoursFinal(value) {
