@@ -304,6 +304,10 @@ console.log('Fenix data file:', FENIX_DATA_FILE);
 console.log('Fenix backup dir:', FENIX_BACKUP_DIR);
 const FENIX_MEMORY_HEARTBEATS = new Map();
 
+// FENIX_APP_ME_RESPONSE_CACHE_116
+const FENIX_APP_ME_RESPONSE_CACHE = new Map();
+const FENIX_APP_ME_CACHE_MS = 15000;
+
 fs.mkdirSync(FENIX_DATA_DIR, { recursive: true });
 
 function createDefaultFenixData() {
@@ -1226,6 +1230,22 @@ user.kickConnected = true;
 
 app.get('/api/fenix/app/me', (req, res) => {
   const sessionId = String(req.query?.sessionId || '').trim();
+
+  if (!sessionId) {
+    return res.status(400).json({ ok: false, message: 'Sessao Fenix nao informada.' });
+  }
+
+  const nowMs = Date.now();
+  const cached = FENIX_APP_ME_RESPONSE_CACHE.get(sessionId);
+
+  if (cached && nowMs - cached.time < FENIX_APP_ME_CACHE_MS) {
+    return res.json({
+      ...cached.payload,
+      cached: true,
+      memoryOnly: true
+    });
+  }
+
   const data = readFenixData();
   const weeklyControl = ensureFenixWeeklyControlFinal(data);
 
@@ -1252,15 +1272,21 @@ app.get('/api/fenix/app/me', (req, res) => {
     writeFenixData(data);
   }
 
-  res.json({
+  const payload = {
     ok: true,
+    cached: false,
     memoryOnly: !weeklyControl.changed,
     weekly: weeklyControl.info,
     user: publicFenixUser(user, weeklyControl.info)
+  };
+
+  FENIX_APP_ME_RESPONSE_CACHE.set(sessionId, {
+    time: nowMs,
+    payload
   });
+
+  res.json(payload);
 });
-
-
 
 
 // FENIX_RESET_ACCESS_FINAL
