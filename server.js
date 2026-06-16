@@ -2049,9 +2049,6 @@ app.post('/api/fenix/admin/user-password/reset', requireFenixAdmin, (req, res) =
 
 
 // FENIX_ADMIN_V2_ROUTE_001
-app.get('/admin-v2', (req,res)=>{
-  res.sendFile(process.cwd() + '/public/admin-v2.html');
-});
 
 app.get('/admin', (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
