@@ -502,7 +502,11 @@ function writeFenixData(data) {
       nextData.cycles.length < currentData.cycles.length
     );
 
-  createFenixDataBackup('before-write', Boolean(forceBackup));
+  // FENIX_FAST_WRITE_BACKUP_ONLY_WHEN_FORCED_114
+  // Evita backup em toda gravacao comum para reduzir lentidao no volume da Railway.
+  if (forceBackup) {
+    createFenixDataBackup('before-write', true);
+  }
 
   fs.mkdirSync(FENIX_DATA_DIR, { recursive: true });
 
