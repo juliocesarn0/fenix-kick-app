@@ -2052,7 +2052,7 @@ a{color:#00ff6a;font-weight:900;text-decoration:none}
     <div class="login">
       <label>Usuário Admin<input id="adminUser" value="GokuuMods"></label>
       <label>Senha Admin<input id="adminSecret" type="password" placeholder="senha admin da Railway"></label>
-      <button id="btnLogin" type="button">Entrar / Salvar</button>
+      <button onclick="saveLogin()">Entrar / Salvar</button>
     </div>
     <div id="loginMsg" class="msg">Digite a senha admin.</div>
   </section>
@@ -2060,8 +2060,8 @@ a{color:#00ff6a;font-weight:900;text-decoration:none}
   <section class="card">
     <div class="tools">
       <label>Data<input id="slotDate" type="date"></label>
-      <button id="btnLoad" type="button">Carregar grade</button>
-      <button id="btnSaveAll" class="gold" type="button">Salvar grade inteira</button>
+      <button onclick="loadSchedule()">Carregar grade</button>
+      <button class="gold" onclick="saveAll()">Salvar grade inteira</button>
       <div id="msg" class="msg"></div>
     </div>
     <br>
@@ -2070,168 +2070,154 @@ a{color:#00ff6a;font-weight:900;text-decoration:none}
 </main>
 
 <script>
-(function(){
-  var API = location.origin;
-  var hours = Array.from({length:24}, function(_,i){ return String(i).padStart(2,"0") + ":00"; });
+const API = location.origin;
+const hours = Array.from({length:24}, (_,i)=>String(i).padStart(2,"0")+":00");
 
-  function el(id){ return document.getElementById(id); }
+function $(id){ return document.getElementById(id); }
 
-  function today(){
-    var d = new Date();
-    return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+function today(){
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+
+function escapeHtml(v){
+  return String(v || "").replace(/[&<>"']/g, function(m){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m];
+  });
+}
+
+function adminHeaders(){
+  return {
+    "Content-Type":"application/json",
+    "x-fenix-admin": $("adminUser").value.trim() || "GokuuMods",
+    "x-fenix-admin-secret": $("adminSecret").value.trim()
+  };
+}
+
+function buildKickUrl(name){
+  const clean = String(name || "")
+    .trim()
+    .replace(/^https?:\/\/kick\.com\//i,"")
+    .replace(/^kick\.com\//i,"")
+    .replace(/^@/,"");
+  return clean ? "https://kick.com/" + clean : "";
+}
+
+function saveLogin(){
+  localStorage.setItem("fenixAdminUser", $("adminUser").value.trim() || "GokuuMods");
+  localStorage.setItem("fenixAdminSecret", $("adminSecret").value.trim());
+  $("loginMsg").textContent = "Login salvo.";
+  loadSchedule();
+}
+
+async function apiGet(url){
+  const res = await fetch(API + url, { headers: adminHeaders(), cache:"no-store" });
+  const data = await res.json();
+  if (!res.ok || data.ok === false) throw new Error(data.message || "Erro API");
+  return data;
+}
+
+async function apiPost(url, body){
+  const res = await fetch(API + url, { method:"POST", headers:adminHeaders(), body:JSON.stringify(body) });
+  const data = await res.json();
+  if (!res.ok || data.ok === false) throw new Error(data.message || "Erro API");
+  return data;
+}
+
+function render(schedule){
+  const date = $("slotDate").value || today();
+  const list = Array.isArray(schedule) ? schedule : [];
+
+  $("rows").innerHTML = hours.map(function(hour){
+    const slot = list.find(function(s){ return s.slotDate === date && s.slotHour === hour; }) || {};
+    return '<div class="row" data-hour="'+hour+'">' +
+      '<div class="hour">'+hour+'</div>' +
+      '<input data-screen="1" placeholder="Tela 1 canal" value="'+escapeHtml(slot.screen1Name || "")+'">' +
+      '<input data-screen="2" placeholder="Tela 2 canal" value="'+escapeHtml(slot.screen2Name || "")+'">' +
+      '<input data-screen="3" placeholder="Tela 3 canal" value="'+escapeHtml(slot.screen3Name || "")+'">' +
+      '<button onclick="saveHour(\''+hour+'\')">Salvar</button>' +
+    '</div>';
+  }).join("");
+}
+
+async function loadSchedule(){
+  try{
+    const date = $("slotDate").value || today();
+    $("msg").textContent = "Carregando " + date + "...";
+    const data = await apiGet("/api/fenix/admin/schedule?slotDate=" + encodeURIComponent(date));
+    render(data.schedule || []);
+    $("msg").textContent = "Grade carregada.";
+  }catch(e){
+    $("msg").textContent = e.message;
   }
+}
 
-  function escapeHtml(v){
-    return String(v || "").replace(/[&<>"']/g, function(m){
-      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m];
+async function saveHour(hour){
+  const row = document.querySelector('.row[data-hour="'+hour+'"]');
+  const btn = row.querySelector("button");
+  const date = $("slotDate").value || today();
+
+  const s1 = row.querySelector('[data-screen="1"]').value.trim();
+  const s2 = row.querySelector('[data-screen="2"]').value.trim();
+  const s3 = row.querySelector('[data-screen="3"]').value.trim();
+
+  try{
+    btn.disabled = true;
+    $("msg").textContent = "Salvando " + hour + "...";
+    await apiPost("/api/fenix/admin/schedule", {
+      adminUsername:$("adminUser").value.trim() || "GokuuMods",
+      adminSecret:$("adminSecret").value.trim(),
+      slotDate:date,
+      slotHour:hour,
+      screen1Name:s1, screen1Url:buildKickUrl(s1), screen1Maintenance:!s1,
+      screen2Name:s2, screen2Url:buildKickUrl(s2), screen2Maintenance:!s2,
+      screen3Name:s3, screen3Url:buildKickUrl(s3), screen3Maintenance:!s3,
+      active:true
     });
+    $("msg").textContent = "Horário " + hour + " salvo.";
+  }catch(e){
+    $("msg").textContent = "Erro: " + e.message;
+  }finally{
+    btn.disabled = false;
   }
+}
 
-  function adminHeaders(){
+async function saveAll(){
+  const date = $("slotDate").value || today();
+
+  const rows = hours.map(function(hour){
+    const row = document.querySelector('.row[data-hour="'+hour+'"]');
     return {
-      "Content-Type":"application/json",
-      "x-fenix-admin": el("adminUser").value.trim() || "GokuuMods",
-      "x-fenix-admin-secret": el("adminSecret").value.trim()
+      slotHour:hour,
+      screen1Name:row.querySelector('[data-screen="1"]').value.trim(),
+      screen2Name:row.querySelector('[data-screen="2"]').value.trim(),
+      screen3Name:row.querySelector('[data-screen="3"]').value.trim()
     };
-  }
+  });
 
-  function buildKickUrl(name){
-    var clean = String(name || "")
-      .trim()
-      .replace(/^https?:\/\/kick\.com\//i,"")
-      .replace(/^kick\.com\//i,"")
-      .replace(/^@/,"");
-    return clean ? "https://kick.com/" + clean : "";
-  }
-
-  async function apiGet(url){
-    var res = await fetch(API + url, { headers: adminHeaders(), cache:"no-store" });
-    var data = await res.json();
-    if (!res.ok || data.ok === false) throw new Error(data.message || "Erro API");
-    return data;
-  }
-
-  async function apiPost(url, body){
-    var res = await fetch(API + url, { method:"POST", headers:adminHeaders(), body:JSON.stringify(body) });
-    var data = await res.json();
-    if (!res.ok || data.ok === false) throw new Error(data.message || "Erro API");
-    return data;
-  }
-
-  function render(schedule){
-    var date = el("slotDate").value || today();
-    var list = Array.isArray(schedule) ? schedule : [];
-
-    el("rows").innerHTML = hours.map(function(hour){
-      var slot = list.find(function(s){ return s.slotDate === date && s.slotHour === hour; }) || {};
-      return '<div class="row" data-hour="'+hour+'">' +
-        '<div class="hour">'+hour+'</div>' +
-        '<input data-screen="1" placeholder="Tela 1 canal" value="'+escapeHtml(slot.screen1Name || "")+'">' +
-        '<input data-screen="2" placeholder="Tela 2 canal" value="'+escapeHtml(slot.screen2Name || "")+'">' +
-        '<input data-screen="3" placeholder="Tela 3 canal" value="'+escapeHtml(slot.screen3Name || "")+'">' +
-        '<button type="button" class="save-hour" data-hour="'+hour+'">Salvar</button>' +
-      '</div>';
-    }).join("");
-
-    document.querySelectorAll(".save-hour").forEach(function(btn){
-      btn.addEventListener("click", function(){
-        saveHour(btn.getAttribute("data-hour"));
-      });
+  try{
+    $("msg").textContent = "Salvando grade inteira...";
+    const data = await apiPost("/api/fenix/admin/schedule/bulk", {
+      adminUsername:$("adminUser").value.trim() || "GokuuMods",
+      adminSecret:$("adminSecret").value.trim(),
+      startDate:date,
+      days:1,
+      rows:rows
     });
+    $("msg").textContent = data.message || "Grade inteira salva.";
+    await loadSchedule();
+  }catch(e){
+    $("msg").textContent = "Erro: " + e.message;
   }
+}
 
-  async function loadSchedule(){
-    try{
-      var date = el("slotDate").value || today();
-      el("msg").textContent = "Carregando " + date + "...";
-      var data = await apiGet("/api/fenix/admin/schedule?slotDate=" + encodeURIComponent(date));
-      render(data.schedule || []);
-      el("msg").textContent = "Grade carregada.";
-    }catch(e){
-      el("msg").textContent = e.message || String(e);
-    }
-  }
+$("slotDate").value = today();
+$("adminUser").value = localStorage.getItem("fenixAdminUser") || "GokuuMods";
+$("adminSecret").value = localStorage.getItem("fenixAdminSecret") || "";
 
-  async function saveHour(hour){
-    var row = document.querySelector('.row[data-hour="'+hour+'"]');
-    if (!row) return;
-
-    var btn = row.querySelector("button");
-    var date = el("slotDate").value || today();
-
-    var s1 = row.querySelector('[data-screen="1"]').value.trim();
-    var s2 = row.querySelector('[data-screen="2"]').value.trim();
-    var s3 = row.querySelector('[data-screen="3"]').value.trim();
-
-    try{
-      btn.disabled = true;
-      el("msg").textContent = "Salvando " + hour + "...";
-      await apiPost("/api/fenix/admin/schedule", {
-        adminUsername:el("adminUser").value.trim() || "GokuuMods",
-        adminSecret:el("adminSecret").value.trim(),
-        slotDate:date,
-        slotHour:hour,
-        screen1Name:s1, screen1Url:buildKickUrl(s1), screen1Maintenance:!s1,
-        screen2Name:s2, screen2Url:buildKickUrl(s2), screen2Maintenance:!s2,
-        screen3Name:s3, screen3Url:buildKickUrl(s3), screen3Maintenance:!s3,
-        active:true
-      });
-      el("msg").textContent = "Horário " + hour + " salvo.";
-    }catch(e){
-      el("msg").textContent = "Erro: " + (e.message || String(e));
-    }finally{
-      btn.disabled = false;
-    }
-  }
-
-  async function saveAll(){
-    var date = el("slotDate").value || today();
-
-    var rows = hours.map(function(hour){
-      var row = document.querySelector('.row[data-hour="'+hour+'"]');
-      return {
-        slotHour:hour,
-        screen1Name:row ? row.querySelector('[data-screen="1"]').value.trim() : "",
-        screen2Name:row ? row.querySelector('[data-screen="2"]').value.trim() : "",
-        screen3Name:row ? row.querySelector('[data-screen="3"]').value.trim() : ""
-      };
-    });
-
-    try{
-      el("msg").textContent = "Salvando grade inteira...";
-      var data = await apiPost("/api/fenix/admin/schedule/bulk", {
-        adminUsername:el("adminUser").value.trim() || "GokuuMods",
-        adminSecret:el("adminSecret").value.trim(),
-        startDate:date,
-        days:1,
-        rows:rows
-      });
-      el("msg").textContent = data.message || "Grade inteira salva.";
-      await loadSchedule();
-    }catch(e){
-      el("msg").textContent = "Erro: " + (e.message || String(e));
-    }
-  }
-
-  function saveLogin(){
-    localStorage.setItem("fenixAdminUser", el("adminUser").value.trim() || "GokuuMods");
-    localStorage.setItem("fenixAdminSecret", el("adminSecret").value.trim());
-    el("loginMsg").textContent = "Login salvo.";
-    loadSchedule();
-  }
-
-  el("slotDate").value = today();
-  el("adminUser").value = localStorage.getItem("fenixAdminUser") || "GokuuMods";
-  el("adminSecret").value = localStorage.getItem("fenixAdminSecret") || "";
-
-  el("btnLogin").addEventListener("click", saveLogin);
-  el("btnLoad").addEventListener("click", loadSchedule);
-  el("btnSaveAll").addEventListener("click", saveAll);
-
-  if (el("adminSecret").value) {
-    loadSchedule();
-  }
-})();
+if ($("adminSecret").value) {
+  loadSchedule();
+}
 </script>
 </body>
 </html>`);
