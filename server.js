@@ -1817,8 +1817,17 @@ app.post('/api/fenix/admin/schedule', requireFenixAdmin, (req, res) => {
 
 
 
+// FENIX_FAST_BULK_SCHEDULE_BACKEND_110
 app.post('/api/fenix/admin/schedule/bulk', requireFenixAdmin, (req, res) => {
   const data = readFenixData();
+
+  data.schedule = Array.isArray(data.schedule) ? data.schedule : [];
+
+  const scheduleIndex = new Map();
+  for (const item of data.schedule) {
+    if (!item) continue;
+    scheduleIndex.set(String(item.slotDate || '') + '|' + String(item.slotHour || ''), item);
+  }
 
   const startDate = String(req.body?.startDate || getFenixDateKey()).trim();
   const days = Math.max(1, Math.min(7, Number(req.body?.days || 1)));
@@ -1859,7 +1868,8 @@ app.post('/api/fenix/admin/schedule/bulk', requireFenixAdmin, (req, res) => {
       const screen2Name = String(row.screen2Name || '').trim();
       const screen3Name = String(row.screen3Name || '').trim();
 
-      let slot = data.schedule.find((item) => item.slotDate === slotDate && item.slotHour === slotHour);
+      const slotKey = slotDate + '|' + slotHour;
+      let slot = scheduleIndex.get(slotKey);
 
       if (!slot) {
         slot = {
@@ -1871,6 +1881,7 @@ app.post('/api/fenix/admin/schedule/bulk', requireFenixAdmin, (req, res) => {
         };
 
         data.schedule.push(slot);
+        scheduleIndex.set(slotKey, slot);
       }
 
       slot.screen1Name = screen1Name === '-' ? '' : screen1Name;
