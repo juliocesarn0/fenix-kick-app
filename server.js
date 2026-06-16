@@ -436,24 +436,39 @@ function readLatestFenixBackup() {
   }
 }
 
+// FENIX_DATA_MEMORY_CACHE_115
+let FENIX_DATA_MEMORY_CACHE = null;
+
+function fenixCloneData(data) {
+  return JSON.parse(JSON.stringify(data));
+}
+
 function readFenixData() {
   try {
+    if (FENIX_DATA_MEMORY_CACHE) {
+      return fenixCloneData(FENIX_DATA_MEMORY_CACHE);
+    }
+
     if (!fs.existsSync(FENIX_DATA_FILE)) {
       const initial = createDefaultFenixData();
+      fs.mkdirSync(FENIX_DATA_DIR, { recursive: true });
       fs.writeFileSync(FENIX_DATA_FILE, JSON.stringify(initial, null, 2), 'utf8');
       createFenixDataBackup('initial', true);
-      return initial;
+      FENIX_DATA_MEMORY_CACHE = normalizeFenixDataShape(initial);
+      return fenixCloneData(FENIX_DATA_MEMORY_CACHE);
     }
 
     const parsed = JSON.parse(fs.readFileSync(FENIX_DATA_FILE, 'utf8'));
-    return normalizeFenixDataShape(parsed);
+    FENIX_DATA_MEMORY_CACHE = normalizeFenixDataShape(parsed);
+    return fenixCloneData(FENIX_DATA_MEMORY_CACHE);
   } catch (error) {
     console.error('Erro lendo fenix-data.json:', error);
 
     const backup = readLatestFenixBackup();
 
     if (backup) {
-      return backup;
+      FENIX_DATA_MEMORY_CACHE = normalizeFenixDataShape(backup);
+      return fenixCloneData(FENIX_DATA_MEMORY_CACHE);
     }
 
     throw error;
@@ -468,8 +483,9 @@ function writeFenixData(data) {
     delete nextData.__allowDangerousShrink;
   }
 
-  const current = fenixSafeReadJsonFile(FENIX_DATA_FILE);
-  const currentData = current ? normalizeFenixDataShape(current) : null;
+  const currentData = FENIX_DATA_MEMORY_CACHE
+    ? normalizeFenixDataShape(FENIX_DATA_MEMORY_CACHE)
+    : (fs.existsSync(FENIX_DATA_FILE) ? normalizeFenixDataShape(JSON.parse(fs.readFileSync(FENIX_DATA_FILE, 'utf8'))) : null);
 
   if (currentData && !allowDangerousShrink) {
     const currentUsers = currentData.users.length;
@@ -503,7 +519,6 @@ function writeFenixData(data) {
     );
 
   // FENIX_FAST_WRITE_BACKUP_ONLY_WHEN_FORCED_114
-  // Evita backup em toda gravacao comum para reduzir lentidao no volume da Railway.
   if (forceBackup) {
     createFenixDataBackup('before-write', true);
   }
@@ -519,6 +534,8 @@ function writeFenixData(data) {
   JSON.parse(fs.readFileSync(tempFile, 'utf8'));
 
   fs.renameSync(tempFile, FENIX_DATA_FILE);
+
+  FENIX_DATA_MEMORY_CACHE = normalizeFenixDataShape(nextData);
 }
 /* FIM_FENIX_DATA_PROTECTION_20260612 */
 
