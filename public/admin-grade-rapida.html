@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fenix Admin - Grade Rápida</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#05070d;color:#fff;font-family:Arial,Helvetica,sans-serif}
+header{padding:16px 20px;background:#07110c;border-bottom:1px solid rgba(0,255,106,.25);display:flex;justify-content:space-between;align-items:center}
+h1{margin:0;color:#00ff6a;font-size:22px}
+main{padding:18px;max-width:1180px;margin:0 auto;display:grid;gap:14px}
+.card{background:#0b101a;border:1px solid rgba(0,255,106,.25);border-radius:16px;padding:16px}
+.login{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end}
+.tools{display:grid;grid-template-columns:220px auto auto 1fr;gap:10px;align-items:end}
+.row{display:grid;grid-template-columns:90px 1fr 1fr 1fr 105px;gap:8px;align-items:center;margin-bottom:8px}
+label{display:grid;gap:6px;color:#b8c6d8;font-size:12px;font-weight:900;text-transform:uppercase}
+input{width:100%;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:#080b12;color:#fff;padding:11px 12px;font-weight:800}
+button{border:1px solid rgba(0,255,106,.65);border-radius:10px;background:rgba(0,255,106,.14);color:#fff;padding:11px 14px;cursor:pointer;font-weight:900}
+button:hover{background:rgba(0,255,106,.25)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.gold{border-color:rgba(245,178,42,.7);background:rgba(245,178,42,.13)}
+.msg{color:#f5b22a;font-weight:900;min-height:22px}
+.muted{color:#9ba8ba}
+.hour{color:#f5b22a;font-weight:900}
+a{color:#00ff6a;font-weight:900;text-decoration:none}
+@media(max-width:900px){header,.login,.tools,.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Fenix Admin - Grade Rápida</h1>
+    <div class="muted">Sem ranking, sem histórico, sem refresh automático</div>
+  </div>
+  <a href="/admin">Admin completo</a>
+</header>
+
+<main>
+  <section class="card">
+    <div class="login">
+      <label>Usuário Admin<input id="adminUser" value="GokuuMods"></label>
+      <label>Senha Admin<input id="adminSecret" type="password" placeholder="senha admin da Railway"></label>
+      <button id="btnLogin" type="button">Salvar senha</button>
+    </div>
+    <div id="loginMsg" class="msg">Pronto. Clique em Carregar grade.</div>
+  </section>
+
+  <section class="card">
+    <div class="tools">
+      <label>Data<input id="slotDate" type="date"></label>
+      <button id="btnLoad" type="button">Carregar grade</button>
+      <button id="btnSaveAll" class="gold" type="button">Salvar grade inteira</button>
+      <div id="msg" class="msg"></div>
+    </div>
+    <br>
+    <div id="rows"></div>
+  </section>
+</main>
+
+<script>
+var API = location.origin;
+var hours = Array.from({length:24}, function(_,i){ return String(i).padStart(2,"0") + ":00"; });
+
+function el(id){ return document.getElementById(id); }
+
+function today(){
+  var d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+
+function esc(v){
+  return String(v || "").replace(/[&<>"']/g, function(m){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m];
+  });
+}
+
+function headers(){
+  return {
+    "Content-Type":"application/json",
+    "x-fenix-admin": el("adminUser").value.trim() || "GokuuMods",
+    "x-fenix-admin-secret": el("adminSecret").value.trim()
+  };
+}
+
+function buildKickUrl(name){
+  var clean = String(name || "").trim()
+    .replace(/^https?:\/\/kick\.com\//i,"")
+    .replace(/^kick\.com\//i,"")
+    .replace(/^@/,"");
+  return clean ? "https://kick.com/" + clean : "";
+}
+
+async function getJson(url){
+  var res = await fetch(API + url, { headers: headers(), cache:"no-store" });
+  var data = await res.json();
+  if (!res.ok || data.ok === false) throw new Error(data.message || "Erro API");
+  return data;
+}
+
+async function postJson(url, body){
+  var res = await fetch(API + url, { method:"POST", headers:headers(), body:JSON.stringify(body) });
+  var data = await res.json();
+  if (!res.ok || data.ok === false) throw new Error(data.message || "Erro API");
+  return data;
+}
+
+function drawRows(schedule){
+  var date = el("slotDate").value || today();
+  var list = Array.isArray(schedule) ? schedule : [];
+
+  el("rows").innerHTML = hours.map(function(hour){
+    var slot = list.find(function(s){ return s.slotDate === date && s.slotHour === hour; }) || {};
+    return '<div class="row" data-hour="'+hour+'">' +
+      '<div class="hour">'+hour+'</div>' +
+      '<input data-screen="1" placeholder="Tela 1 canal" value="'+esc(slot.screen1Name || "")+'">' +
+      '<input data-screen="2" placeholder="Tela 2 canal" value="'+esc(slot.screen2Name || "")+'">' +
+      '<input data-screen="3" placeholder="Tela 3 canal" value="'+esc(slot.screen3Name || "")+'">' +
+      '<button type="button" data-save="'+hour+'">Salvar</button>' +
+    '</div>';
+  }).join("");
+
+  document.querySelectorAll("[data-save]").forEach(function(btn){
+    btn.onclick = function(){ saveHour(btn.getAttribute("data-save")); };
+  });
+}
+
+async function loadSchedule(){
+  var date = el("slotDate").value || today();
+  el("msg").textContent = "Carregando grade...";
+  try{
+    var data = await getJson("/api/fenix/admin/schedule?slotDate=" + encodeURIComponent(date));
+    drawRows(data.schedule || []);
+    el("msg").textContent = "Grade carregada.";
+  }catch(e){
+    el("msg").textContent = "Erro: " + (e.message || String(e));
+  }
+}
+
+async function saveHour(hour){
+  var row = document.querySelector('.row[data-hour="'+hour+'"]');
+  if (!row) return;
+
+  var btn = row.querySelector("button");
+  var date = el("slotDate").value || today();
+  var s1 = row.querySelector('[data-screen="1"]').value.trim();
+  var s2 = row.querySelector('[data-screen="2"]').value.trim();
+  var s3 = row.querySelector('[data-screen="3"]').value.trim();
+
+  btn.disabled = true;
+  el("msg").textContent = "Salvando " + hour + "...";
+
+  try{
+    await postJson("/api/fenix/admin/schedule", {
+      adminUsername: el("adminUser").value.trim() || "GokuuMods",
+      adminSecret: el("adminSecret").value.trim(),
+      slotDate: date,
+      slotHour: hour,
+      screen1Name:s1, screen1Url:buildKickUrl(s1), screen1Maintenance:!s1,
+      screen2Name:s2, screen2Url:buildKickUrl(s2), screen2Maintenance:!s2,
+      screen3Name:s3, screen3Url:buildKickUrl(s3), screen3Maintenance:!s3,
+      active:true
+    });
+    el("msg").textContent = "Horário " + hour + " salvo.";
+  }catch(e){
+    el("msg").textContent = "Erro: " + (e.message || String(e));
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+async function saveAll(){
+  var date = el("slotDate").value || today();
+  var rows = hours.map(function(hour){
+    var row = document.querySelector('.row[data-hour="'+hour+'"]');
+    return {
+      slotHour: hour,
+      screen1Name: row ? row.querySelector('[data-screen="1"]').value.trim() : "",
+      screen2Name: row ? row.querySelector('[data-screen="2"]').value.trim() : "",
+      screen3Name: row ? row.querySelector('[data-screen="3"]').value.trim() : ""
+    };
+  });
+
+  el("msg").textContent = "Salvando grade inteira...";
+  try{
+    var data = await postJson("/api/fenix/admin/schedule/bulk", {
+      adminUsername: el("adminUser").value.trim() || "GokuuMods",
+      adminSecret: el("adminSecret").value.trim(),
+      startDate: date,
+      days: 1,
+      rows: rows
+    });
+    el("msg").textContent = data.message || "Grade inteira salva.";
+    await loadSchedule();
+  }catch(e){
+    el("msg").textContent = "Erro: " + (e.message || String(e));
+  }
+}
+
+function saveLogin(){
+  localStorage.setItem("fenixAdminUser", el("adminUser").value.trim() || "GokuuMods");
+  localStorage.setItem("fenixAdminSecret", el("adminSecret").value.trim());
+  el("loginMsg").textContent = "Senha salva. Clique em Carregar grade.";
+}
+
+window.addEventListener("DOMContentLoaded", function(){
+  el("slotDate").value = today();
+  el("adminUser").value = localStorage.getItem("fenixAdminUser") || "GokuuMods";
+  el("adminSecret").value = localStorage.getItem("fenixAdminSecret") || "";
+
+  el("btnLogin").onclick = saveLogin;
+  el("btnLoad").onclick = loadSchedule;
+  el("btnSaveAll").onclick = saveAll;
+
+  drawRows([]);
+});
+</script>
+</body>
+</html>
