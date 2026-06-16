@@ -2008,7 +2008,7 @@ app.get('/admin', (req, res) => {
 
 // FENIX_ADMIN_GRADE_RAPIDA_FINAL
 app.get('/admin/grade-rapida', (req, res) => {
-  res.redirect('/admin-grade-rapida.html');
+  res.sendFile(require('path').join(__dirname, 'public', 'admin-grade-rapida.html'));
 });
 
 // FENIX_FORM_GRADE_SORTEIO_FINAL
