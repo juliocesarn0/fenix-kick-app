@@ -1,0 +1,40 @@
+﻿<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Fenix Admin V2</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="/admin-v2.css">
+</head>
+<body>
+  <header>
+    <h1>Fenix Admin V2</h1>
+    <span>Grade Rápida</span>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Login Admin</h2>
+      <div class="grid">
+        <input id="adminUser" value="GokuuMods">
+        <input id="adminSecret" type="password" placeholder="Senha Admin">
+        <button id="saveLogin">Salvar Login</button>
+      </div>
+      <p id="loginMsg"></p>
+    </section>
+
+    <section class="card">
+      <h2>Grade</h2>
+      <div class="grid">
+        <input id="slotDate" type="date">
+        <button id="loadSchedule">Carregar Grade</button>
+        <button id="saveAll">Salvar Tudo</button>
+      </div>
+      <p id="msg"></p>
+      <div id="rows"></div>
+    </section>
+  </main>
+
+  <script src="/admin-v2.js"></script>
+</body>
+</html>

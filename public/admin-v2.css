@@ -1,0 +1,43 @@
+﻿body{
+ margin:0;
+ background:#05070d;
+ color:#fff;
+ font-family:Arial;
+}
+header{
+ display:flex;
+ justify-content:space-between;
+ padding:20px;
+ background:#07110c;
+ border-bottom:1px solid rgba(0,255,106,.3);
+}
+h1{color:#00ff6a;margin:0}
+main{padding:20px;display:grid;gap:20px}
+.card{
+ background:#0b101a;
+ border:1px solid rgba(0,255,106,.25);
+ border-radius:16px;
+ padding:20px;
+}
+.grid{
+ display:grid;
+ grid-template-columns:1fr 1fr 1fr;
+ gap:10px;
+}
+input,button{
+ padding:12px;
+ border-radius:10px;
+ border:none;
+}
+button{
+ background:#00aa55;
+ color:#fff;
+ font-weight:bold;
+ cursor:pointer;
+}
+.row{
+ display:grid;
+ grid-template-columns:90px 1fr 1fr 1fr 100px;
+ gap:8px;
+ margin-bottom:8px;
+}
