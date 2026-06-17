@@ -3016,15 +3016,56 @@ function fenixAvailabilityTextSimple(availability) {
 }
 
 function fenixRenderGradeSorteioSimplesPage({ applicants = [], draw = null, message = '' } = {}) {
-  const applicantRows = applicants.map((item) => {
-    return `
-      <tr>
-        <td>${fenixHtmlEscape(item.name)}</td>
-        <td><b>${fenixHtmlEscape(item.nick)}</b></td>
-        <td>${fenixHtmlEscape(item.whatsapp)}</td>
-        <td>${fenixHtmlEscape(fenixAvailabilityTextSimple(item.availability))}</td>
-      </tr>
-    `;
+  // FENIX_APPLICANTS_COMPACT_LIST_119
+  function applicantAvailabilityGroups119(availability) {
+    const labels = { segunda: 'Segunda', terca: 'Terca', quarta: 'Quarta', quinta: 'Quinta', sexta: 'Sexta', sabado: 'Sabado' };
+    const source = availability && typeof availability === 'object' ? availability : {};
+
+    return ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'].map((key) => {
+      const hours = Array.isArray(source[key]) ? source[key] : [];
+      const cleanHours = hours
+        .map((hour) => String(hour).replace(/\D/g, ''))
+        .filter(Boolean)
+        .map((hour) => String(hour).padStart(2, '0') + 'h');
+
+      return { key, label: labels[key], hours: cleanHours, count: cleanHours.length };
+    });
+  }
+
+  function applicantAvailabilityCount119(availability) {
+    return applicantAvailabilityGroups119(availability).reduce((total, day) => total + day.count, 0);
+  }
+
+  function applicantAvailabilityDetails119(availability) {
+    const groups = applicantAvailabilityGroups119(availability);
+
+    if (!groups.some((day) => day.count > 0)) {
+      return '<div class="muted">Nenhum horario marcado.</div>';
+    }
+
+    return '<div class="applicant-hours">' + groups.map((day) => {
+      const content = day.count ? day.hours.join(', ') : '-';
+      return '<div><b>' + fenixHtmlEscape(day.label) + ':</b> ' + fenixHtmlEscape(content) + '</div>';
+    }).join('') + '</div>';
+  }
+
+  const applicantRows = applicants.map((item, index) => {
+    const totalHours = applicantAvailabilityCount119(item.availability);
+    const searchText = [
+      item.name,
+      item.nick,
+      item.whatsapp,
+      fenixAvailabilityTextSimple(item.availability)
+    ].join(' ').toLowerCase();
+
+    return '<tr class="applicant-row" data-search="' + fenixHtmlEscape(searchText) + '">' +
+      '<td>' + (index + 1) + '</td>' +
+      '<td>' + fenixHtmlEscape(item.name) + '</td>' +
+      '<td><b>' + fenixHtmlEscape(item.nick) + '</b></td>' +
+      '<td>' + fenixHtmlEscape(item.whatsapp) + '</td>' +
+      '<td><b>' + totalHours + '</b></td>' +
+      '<td><details><summary>Ver horarios</summary>' + applicantAvailabilityDetails119(item.availability) + '</details></td>' +
+    '</tr>';
   }).join('');
 
   const drawRows = draw && Array.isArray(draw.rows) ? draw.rows.map((row) => {
@@ -3132,19 +3173,71 @@ function fenixRenderGradeSorteioSimplesPage({ applicants = [], draw = null, mess
     </form>
 
     <h3>Total: ${applicants.length}</h3>
-    <table>
+
+    <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;margin:12px 0">
+      <label>Pesquisar inscrito:
+        <input id="applicantSearch119" type="text" placeholder="Nome, Kick ou WhatsApp">
+      </label>
+      <button type="button" onclick="fenixClearApplicantSearch119()">Limpar busca</button>
+    </div>
+
+    <div class="muted" id="applicantSearchInfo119">Mostrando ${applicants.length} inscritos.</div>
+
+    <table id="applicantsTable119">
       <thead>
         <tr>
+          <th>#</th>
           <th>Nome</th>
           <th>Nick Kick</th>
           <th>WhatsApp</th>
-          <th>Horários marcados</th>
+          <th>Total horarios</th>
+          <th>Acoes</th>
         </tr>
       </thead>
       <tbody>
-        ${applicantRows || '<tr><td colspan="4">Nenhum inscrito carregado ainda.</td></tr>'}
+        ${applicantRows || '<tr><td colspan="6">Nenhum inscrito carregado ainda.</td></tr>'}
       </tbody>
     </table>
+
+    <style>
+      #applicantsTable119 td,
+      #applicantsTable119 th { vertical-align: top; }
+      #applicantsTable119 details { border: 1px solid rgba(245,178,42,.35); border-radius: 10px; padding: 7px 10px; background: rgba(245,178,42,.06); }
+      #applicantsTable119 summary { cursor: pointer; color: #f5b22a; font-weight: 900; }
+      .applicant-hours { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 6px 12px; margin-top: 8px; line-height: 1.45; }
+      @media(max-width:900px) { .applicant-hours { grid-template-columns: 1fr; } }
+    </style>
+
+    <script>
+      function fenixApplyApplicantSearch119(){
+        const input = document.getElementById('applicantSearch119');
+        const info = document.getElementById('applicantSearchInfo119');
+        const rows = Array.from(document.querySelectorAll('#applicantsTable119 .applicant-row'));
+        const query = String((input && input.value) || '').trim().toLowerCase();
+        let visible = 0;
+
+        rows.forEach(function(row){
+          const text = String(row.getAttribute('data-search') || '').toLowerCase();
+          const show = !query || text.includes(query);
+          row.style.display = show ? '' : 'none';
+          if (show) visible++;
+        });
+
+        if (info) info.textContent = 'Mostrando ' + visible + ' de ' + rows.length + ' inscritos.';
+      }
+
+      function fenixClearApplicantSearch119(){
+        const input = document.getElementById('applicantSearch119');
+        if (input) input.value = '';
+        fenixApplyApplicantSearch119();
+      }
+
+      document.addEventListener('DOMContentLoaded', function(){
+        const input = document.getElementById('applicantSearch119');
+        if (input) input.addEventListener('input', fenixApplyApplicantSearch119);
+        fenixApplyApplicantSearch119();
+      });
+    </script>
   </section>
 
   <section>
