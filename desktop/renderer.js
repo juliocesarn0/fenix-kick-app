@@ -311,41 +311,62 @@ function updateUserUi(user) {
 
   updateAdminButtonVisibility(user);
 
-  profileName.textContent = user.username || CONFIG.fallbackProfile;
-  totalPoints.textContent = Number(user.points || 0);
+  const profileNameEl = $("profileName");
+  const weeklyPointsEl = $("weeklyPoints");
+  const weeklyGoalEl = $("weeklyGoal");
+  const weeklyGoalCardEl = $("weeklyGoalCard");
+  const weeklyMinimumEl = $("weeklyMinimum");
+  const weeklyMinimumLabelEl = $("weeklyMinimumLabel");
+  const weeklyPercentEl = $("weeklyPercent");
+  const weeklyMissingEl = $("weeklyMissing");
+  const weeklyBarEl = $("weeklyBar");
+  const weeklyPeriodEl = $("weeklyPeriod");
+  const weeklyStatusEl = $("weeklyStatus");
+  const weeklyTextEl = $("weeklyText");
 
-  const weeklyPoints = Number(user.weeklyPoints || 0);
-  const weeklyGoal = Math.max(1, Number(user.weeklyGoal || CONFIG.weeklyGoal));
-  const weeklyMinimum = Math.max(0, Number(user.weeklyMinimum || CONFIG.weeklyMinimum));
-  const calculatedPercent = Math.floor((weeklyPoints / weeklyGoal) * 100);
-  const apiPercent = Number(user.weeklyPercent);
-  const percent = Math.max(0, Math.min(100, Number.isFinite(apiPercent) ? apiPercent : calculatedPercent));
-  const missing = Math.max(0, Number.isFinite(Number(user.weeklyMissing)) ? Number(user.weeklyMissing) : weeklyMinimum - weeklyPoints);
-  const approved = typeof user.weeklyApproved === "boolean"
-    ? user.weeklyApproved
-    : weeklyPoints >= weeklyMinimum;
-  const approvalPercent = Math.round((weeklyMinimum / weeklyGoal) * 100);
-
-  weeklyPoints.textContent = weeklyPoints;
-  weeklyGoal.textContent = weeklyGoal;
-  weeklyGoalCard.textContent = weeklyGoal;
-  weeklyMinimum.textContent = weeklyMinimum;
-  weeklyMinimumLabel.textContent = "MINIMO " + approvalPercent + "%";
-  weeklyPercent.textContent = percent + "%";
-  weeklyMissing.textContent = missing;
-  weeklyBar.style.width = percent + "%";
-
-  const weeklyPeriod = weeklyPeriod;
-  if (weeklyPeriod) {
-    weeklyPeriod.textContent = user.weeklyMessage || "Conta de domingo 00:00 ate sabado 23:59. Pontuacao 24/7.";
+  if (profileNameEl) {
+    profileNameEl.textContent = user.username || CONFIG.fallbackProfile;
   }
 
-  if (approved) {
-    weeklyStatus.textContent = "LIBERADO";
-    weeklyText.textContent = "Voce bateu " + approvalPercent + "% da semana e pode entrar na proxima grade.";
-  } else {
-    weeklyStatus.textContent = "NAO LIBERADO";
-    weeklyText.textContent = "Continue farmando para liberar a proxima grade.";
+  const weeklyPointsValue = Number(user.weeklyPoints || 0);
+  const weeklyGoalValue = Math.max(1, Number(user.weeklyGoal || CONFIG.weeklyGoal));
+  const weeklyMinimumValue = Math.max(0, Number(user.weeklyMinimum || CONFIG.weeklyMinimum));
+  const calculatedPercent = Math.floor((weeklyPointsValue / weeklyGoalValue) * 100);
+  const apiPercent = Number(user.weeklyPercent);
+  const percentValue = Math.max(0, Math.min(100, Number.isFinite(apiPercent) ? apiPercent : calculatedPercent));
+  const apiMissing = Number(user.weeklyMissing);
+  const missingValue = Math.max(
+    0,
+    Number.isFinite(apiMissing) ? apiMissing : weeklyMinimumValue - weeklyPointsValue
+  );
+  const approved = typeof user.weeklyApproved === "boolean"
+    ? user.weeklyApproved
+    : weeklyPointsValue >= weeklyMinimumValue;
+  const approvalPercent = Math.round((weeklyMinimumValue / weeklyGoalValue) * 100);
+
+  if (weeklyPointsEl) weeklyPointsEl.textContent = weeklyPointsValue;
+  if (weeklyGoalEl) weeklyGoalEl.textContent = weeklyGoalValue;
+  if (weeklyGoalCardEl) weeklyGoalCardEl.textContent = weeklyGoalValue;
+  if (weeklyMinimumEl) weeklyMinimumEl.textContent = weeklyMinimumValue;
+  if (weeklyMinimumLabelEl) weeklyMinimumLabelEl.textContent = "MINIMO " + approvalPercent + "%";
+  if (weeklyPercentEl) weeklyPercentEl.textContent = percentValue + "%";
+  if (weeklyMissingEl) weeklyMissingEl.textContent = missingValue;
+  if (weeklyBarEl) weeklyBarEl.style.width = percentValue + "%";
+
+  if (weeklyPeriodEl) {
+    weeklyPeriodEl.textContent =
+      user.weeklyMessage ||
+      "Conta de domingo 00:00 ate sabado 23:59. Pontuacao 24/7.";
+  }
+
+  if (weeklyStatusEl) {
+    weeklyStatusEl.textContent = approved ? "LIBERADO" : "NAO LIBERADO";
+  }
+
+  if (weeklyTextEl) {
+    weeklyTextEl.textContent = approved
+      ? "Voce bateu " + approvalPercent + "% da semana e pode entrar na proxima grade."
+      : "Continue farmando para liberar a proxima grade.";
   }
 }
 async function loginFenix() {
@@ -780,7 +801,6 @@ function renderAdminUsers(users) {
 
   box.innerHTML = users.map((user) => {
     const username = user.username || user.userName || "Sem nome";
-    const points = Number(user.points || 0);
     const weeklyPoints = Number(user.weeklyPoints || 0);
     const totalMinutes = Number(user.totalMinutes || 0);
     const weeklyMinutes = Number(user.weeklyMinutes || 0);
@@ -793,7 +813,7 @@ function renderAdminUsers(users) {
           <strong>${username}</strong>
           <span>${role} • ${kickLogged}</span>
         </div>
-        <div><small>Pontos</small><b>${points}</b></div>
+
         <div><small>Semana</small><b>${weeklyPoints}</b></div>
         <div><small>Min total</small><b>${totalMinutes}</b></div>
         <div><small>Min semana</small><b>${weeklyMinutes}</b></div>
@@ -892,7 +912,6 @@ async function loadAdminUsers() {
     const now = Date.now();
 
     const normalized = users.map((user) => {
-      const points = Number(user.points || user.totalPoints || 0);
       const weeklyPoints = Number(user.weeklyPoints || user.weekPoints || user.pointsWeek || 0);
       const weeklyMinutes = Number(user.weeklyMinutes || user.minutesWeek || 0);
       const totalMinutes = Number(user.totalMinutes || user.minutes || 0);
@@ -921,7 +940,6 @@ async function loadAdminUsers() {
       return {
         username: user.username || user.userName || user.name || "Usuario",
         kickName: user.kickUsername || user.kickName || user.kick || "-",
-        points,
         weeklyPoints,
         weeklyMinutes,
         totalMinutes,
@@ -938,11 +956,11 @@ async function loadAdminUsers() {
 
     const activeUsers = normalized
       .filter((user) => user.farmActive)
-      .sort((a, b) => b.weeklyPoints - a.weeklyPoints || b.points - a.points);
+      .sort((a, b) => b.weeklyPoints - a.weeklyPoints);
 
     const ranking = normalized
       .slice()
-      .sort((a, b) => b.weeklyPoints - a.weeklyPoints || b.points - a.points);
+      .sort((a, b) => b.weeklyPoints - a.weeklyPoints);
 
     const renderLastCycle = (user) => {
       if (!user.lastCycleRaw) return "-";
@@ -961,13 +979,12 @@ async function loadAdminUsers() {
             "<td>" + user.kickName + "</td>",
             '<td><span class="admin-pill green">Farm ativo</span></td>',
             "<td>" + user.weeklyPoints + "</td>",
-            "<td>" + user.points + "</td>",
             "<td>" + user.weeklyMinutes + " min</td>",
             "<td>" + renderLastCycle(user) + "</td>",
             "</tr>"
           ].join("");
         }).join("")
-      : '<tr><td colspan="8" class="admin-empty-cell">Ninguem farmando agora.</td></tr>';
+      : '<tr><td colspan="7" class="admin-empty-cell">Ninguem farmando agora.</td></tr>';
 
     const rankingRows = ranking.map((user, index) => {
       const approved = user.weeklyApproved;
@@ -979,7 +996,6 @@ async function loadAdminUsers() {
         "<td><b>" + user.username + "</b></td>",
         "<td>" + user.kickName + "</td>",
         "<td>" + user.weeklyPoints + " pontos</td>",
-        "<td>" + user.points + " pontos</td>",
         "<td>" + percent + "%</td>",
         '<td><span class="admin-pill ' + (approved ? "green" : "red") + '">' + (approved ? "Aprovado " + user.approvalPercent + "%" : "Pendente") + "</span></td>",
         "</tr>"
@@ -991,14 +1007,14 @@ async function loadAdminUsers() {
       '<div class="admin-table-card">',
       '<div class="admin-table-title"><span>Farm ativo agora</span><small>' + activeUsers.length + " online/farmando</small></div>",
       '<table class="admin-users-table">',
-      '<thead><tr><th>#</th><th>Usuario</th><th>Kick</th><th>Status</th><th>Semana</th><th>Total</th><th>Min semana</th><th>Ultimo ciclo</th></tr></thead>',
+      '<thead><tr><th>#</th><th>Usuario</th><th>Kick</th><th>Status</th><th>Semana</th><th>Min semana</th><th>Ultimo ciclo</th></tr></thead>',
       "<tbody>" + activeRows + "</tbody>",
       "</table>",
       "</div>",
       '<div class="admin-table-card">',
       '<div class="admin-table-title"><span>Ranking de pontos da semana</span><small>Meta ' + (ranking[0]?.weeklyGoal || CONFIG.weeklyGoal) + ' pontos - minimo ' + (ranking[0]?.approvalPercent || 90) + '% = ' + (ranking[0]?.weeklyMinimum || CONFIG.weeklyMinimum) + '</small></div>',
       '<table class="admin-users-table">',
-      '<thead><tr><th>#</th><th>Usuario</th><th>Kick</th><th>Semana</th><th>Total</th><th>% Meta</th><th>Status</th></tr></thead>',
+      '<thead><tr><th>#</th><th>Usuario</th><th>Kick</th><th>Semana</th><th>% Meta</th><th>Status</th></tr></thead>',
       "<tbody>" + rankingRows + "</tbody>",
       "</table>",
       "</div>",
