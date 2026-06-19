@@ -1,6 +1,7 @@
 const CONFIG = {
   // FENIX_LOCAL_API_OVERRIDE_105
   adminApi: localStorage.getItem("fenixApiOverride") || "https://fenix-kick-app-production.up.railway.app",
+  appVersion: "1.0.7",
   fallbackProfile: "GokuuMods",
   refreshSeconds: 60,
   cycleSeconds: 600,
@@ -2081,6 +2082,11 @@ async function sendFenixFastHeartbeat(reason = "timer") {
         kickLoggedIn: Boolean(kickLoggedIn || kickTabsLoggedIn),
         tabsKickLoggedIn: Boolean(kickTabsLoggedIn),
         tabsLoggedIn: Boolean(kickTabsLoggedIn),
+        appVersion: String(CONFIG.appVersion || '1.0.7'),
+        deviceId: getFenixDeviceId(),
+        extraTabs: typeof fenixGetExtraTabsHeartbeat107 === 'function'
+          ? fenixGetExtraTabsHeartbeat107()
+          : [],
         reason
       })
     });
@@ -2092,6 +2098,13 @@ async function sendFenixFastHeartbeat(reason = "timer") {
       setFenixHeartbeatStatus(msg);
       console.warn("Heartbeat Fenix falhou:", res.status, data);
       return false;
+    }
+
+    if (
+      Array.isArray(data.extraTargets) &&
+      typeof fenixApplyExtraTargets107 === 'function'
+    ) {
+      await fenixApplyExtraTargets107(data.extraTargets);
     }
 
     const now = new Date();
@@ -2693,97 +2706,502 @@ checkKickTabsLoggedIn = async function() {
 
 
 
-/* FENIX_EXTRA_HIDDEN_VIEW_RENDERER_FINAL */
-let fenixExtraHiddenLastUrlFinal = "";
+/* FENIX_EXTRA_HIDDEN_VIEWS_RENDERER_107 */
+const FENIX_EXTRA_TAB_NUMBERS_107 = [4, 5, 6];
+const fenixExtraTabStates107 = new Map();
+let fenixExtraTargetsRequest107 = null;
 
-function fenixExtraHiddenViewFinal() {
-  return document.getElementById("view4");
+for (const number of FENIX_EXTRA_TAB_NUMBERS_107) {
+  fenixExtraTabStates107.set(number, {
+    number,
+    enabled: false,
+    configured: false,
+    name: "",
+    url: "",
+    currentUrl: "",
+    status: "closed",
+    detail: "Aba desativada.",
+    pageLoaded: false,
+    liveFound: false,
+    playerFound: false,
+    playing: false,
+    stalled: false,
+    error: "",
+    currentTime: 0,
+    readyState: 0,
+    lastProgressAt: "",
+    checkedAt: "",
+    lastTargetUrl: "",
+    lastVideoTime: 0,
+    lastProgressAtMs: 0,
+    eventsAttached: false
+  });
 }
 
-function fenixNormalizeExtraUrlFinal(value) {
-  return String(value || "").trim().replace(/\/+$/, "").toLowerCase();
+function fenixExtraView107(number) {
+  return document.getElementById("view" + number);
 }
 
-async function fenixFetchExtraHiddenTargetFinal() {
-  const res = await fetch(CONFIG.adminApi + "/api/fenix/app/extra-target", {
-    cache: "no-store"
+function fenixExtraState107(number) {
+  return fenixExtraTabStates107.get(Number(number));
+}
+
+function fenixNormalizeExtraUrl107(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\/+$/, "")
+    .toLowerCase();
+}
+
+function fenixSetExtraState107(number, patch) {
+  const state = fenixExtraState107(number);
+  if (!state) return null;
+
+  Object.assign(state, patch || {});
+  state.number = Number(number);
+  state.checkedAt = new Date().toISOString();
+  return state;
+}
+
+function fenixPublicExtraState107(state) {
+  return {
+    number: state.number,
+    enabled: Boolean(state.enabled),
+    configured: Boolean(state.configured),
+    name: String(state.name || ""),
+    url: String(state.url || ""),
+    currentUrl: String(state.currentUrl || ""),
+    status: String(state.status || "closed"),
+    detail: String(state.detail || ""),
+    pageLoaded: Boolean(state.pageLoaded),
+    liveFound: Boolean(state.liveFound),
+    playerFound: Boolean(state.playerFound),
+    playing: Boolean(state.playing),
+    stalled: Boolean(state.stalled),
+    error: String(state.error || ""),
+    currentTime: Number(state.currentTime || 0),
+    readyState: Number(state.readyState || 0),
+    lastProgressAt: String(state.lastProgressAt || ""),
+    checkedAt: String(state.checkedAt || "")
+  };
+}
+
+function fenixGetExtraTabsHeartbeat107() {
+  return FENIX_EXTRA_TAB_NUMBERS_107.map((number) => {
+    return fenixPublicExtraState107(fenixExtraState107(number));
+  });
+}
+
+function fenixAttachExtraViewEvents107(number) {
+  const view = fenixExtraView107(number);
+  const state = fenixExtraState107(number);
+
+  if (!view || !state || state.eventsAttached) return;
+
+  state.eventsAttached = true;
+  fenixApplyWebviewNoThrottle(view);
+
+  view.addEventListener("did-start-loading", () => {
+    if (!state.enabled) return;
+
+    fenixSetExtraState107(number, {
+      status: "loading",
+      detail: "Carregando página da live...",
+      pageLoaded: false,
+      liveFound: false,
+      playerFound: false,
+      playing: false,
+      stalled: false,
+      error: ""
+    });
   });
 
-  const data = await res.json();
+  view.addEventListener("dom-ready", () => {
+    if (!state.enabled) return;
 
-  if (!res.ok || data.ok === false) {
-    throw new Error(data.message || "Extra target indisponivel.");
-  }
+    fenixSetExtraState107(number, {
+      status: "loaded",
+      detail: "Página carregada. Verificando player...",
+      pageLoaded: true,
+      error: ""
+    });
 
-  return data.extraTarget || {};
+    try {
+      muteWebview(view);
+    } catch {}
+
+    setTimeout(() => fenixInspectExtraTab107(number), 1200);
+  });
+
+  view.addEventListener("did-stop-loading", () => {
+    if (!state.enabled) return;
+
+    fenixSetExtraState107(number, {
+      pageLoaded: true,
+      currentUrl: fenixGetWebviewUrl(view),
+      detail: "Página carregada. Verificando reprodução..."
+    });
+
+    setTimeout(() => fenixInspectExtraTab107(number), 600);
+  });
+
+  view.addEventListener("did-fail-load", (event) => {
+    if (!state.enabled || Number(event?.errorCode) === -3) return;
+
+    fenixSetExtraState107(number, {
+      status: "error",
+      detail: "Falha ao carregar a live.",
+      pageLoaded: false,
+      liveFound: false,
+      playerFound: false,
+      playing: false,
+      stalled: false,
+      error: String(event?.errorDescription || "Falha de carregamento")
+    });
+  });
+
+  view.addEventListener("render-process-gone", (event) => {
+    if (!state.enabled) return;
+
+    fenixSetExtraState107(number, {
+      status: "error",
+      detail: "Processo da aba foi encerrado.",
+      playing: false,
+      stalled: false,
+      error: String(event?.details?.reason || "render-process-gone")
+    });
+  });
 }
 
-async function fenixRefreshExtraHiddenTargetFinal() {
+function fenixCloseExtraTab107(number, target = {}) {
+  const view = fenixExtraView107(number);
+  const state = fenixExtraState107(number);
+
+  if (view) {
+    try {
+      view.stop();
+    } catch {}
+
+    try {
+      view.setAttribute("src", "about:blank");
+      view.src = "about:blank";
+    } catch {}
+  }
+
+  if (state) {
+    fenixSetExtraState107(number, {
+      enabled: false,
+      configured: Boolean(target?.name),
+      name: String(target?.name || ""),
+      url: "",
+      currentUrl: "",
+      status: "disabled",
+      detail: "Aba desativada pelo Admin.",
+      pageLoaded: false,
+      liveFound: false,
+      playerFound: false,
+      playing: false,
+      stalled: false,
+      error: "",
+      currentTime: 0,
+      readyState: 0,
+      lastProgressAt: "",
+      lastTargetUrl: "",
+      lastVideoTime: 0,
+      lastProgressAtMs: 0
+    });
+  }
+}
+
+async function fenixInspectExtraTab107(number) {
+  const view = fenixExtraView107(number);
+  const state = fenixExtraState107(number);
+
+  if (!view || !state || !state.enabled) return false;
+
   try {
-    const view = fenixExtraHiddenViewFinal();
-    if (!view) return false;
+    const inspection = await view.executeJavaScript(`
+      (() => {
+        const video = document.querySelector("video");
+        const bodyText = String(document.body?.innerText || "")
+          .slice(0, 12000)
+          .toLowerCase();
 
-    fenixApplyWebviewNoThrottle(view);
+        const offlineText =
+          bodyText.includes("channel is offline") ||
+          bodyText.includes("stream is offline") ||
+          bodyText.includes("currently offline") ||
+          bodyText.includes("live has ended") ||
+          bodyText.includes("não está ao vivo") ||
+          bodyText.includes("nao esta ao vivo");
 
-    const target = await fenixFetchExtraHiddenTargetFinal();
+        return {
+          href: String(location.href || ""),
+          documentReady: document.readyState,
+          hasVideo: Boolean(video),
+          paused: video ? Boolean(video.paused) : true,
+          ended: video ? Boolean(video.ended) : false,
+          readyState: video ? Number(video.readyState || 0) : 0,
+          networkState: video ? Number(video.networkState || 0) : 0,
+          currentTime: video ? Number(video.currentTime || 0) : 0,
+          duration: video && Number.isFinite(video.duration) ? Number(video.duration) : 0,
+          videoError: video?.error
+            ? String(video.error.message || video.error.code || "Erro no vídeo")
+            : "",
+          offlineText
+        };
+      })()
+    `, true);
 
-    if (!target.enabled || !target.url) {
-      fenixExtraHiddenLastUrlFinal = "";
+    const nowMs = Date.now();
+    const currentTime = Number(inspection?.currentTime || 0);
+    const readyState = Number(inspection?.readyState || 0);
+    const playerFound = Boolean(inspection?.hasVideo);
+    const advanced = currentTime > Number(state.lastVideoTime || 0) + 0.2;
 
-      try {
-        view.removeAttribute("src");
-      } catch {}
-
-      return false;
+    if (advanced) {
+      state.lastProgressAtMs = nowMs;
+      state.lastProgressAt = new Date(nowMs).toISOString();
+    } else if (!state.lastProgressAtMs && currentTime > 0) {
+      state.lastProgressAtMs = nowMs;
+      state.lastProgressAt = new Date(nowMs).toISOString();
     }
 
-    const targetUrl = String(target.url || "").trim();
-    const currentUrl = fenixGetWebviewUrl(view);
+    const playing = Boolean(
+      playerFound &&
+      !inspection?.paused &&
+      !inspection?.ended &&
+      readyState >= 2
+    );
 
-    if (fenixNormalizeExtraUrlFinal(currentUrl) !== fenixNormalizeExtraUrlFinal(targetUrl)) {
-      view.setAttribute("src", targetUrl);
-      view.src = targetUrl;
-      fenixExtraHiddenLastUrlFinal = targetUrl;
-    } else if (fenixExtraHiddenLastUrlFinal !== targetUrl) {
-      try {
-        view.reload();
-      } catch {}
-      fenixExtraHiddenLastUrlFinal = targetUrl;
+    const stalled = Boolean(
+      playing &&
+      state.lastProgressAtMs &&
+      nowMs - state.lastProgressAtMs >= 45000
+    );
+
+    let status = "loaded";
+    let detail = "Página carregada, aguardando player.";
+
+    if (inspection?.videoError) {
+      status = "error";
+      detail = "O player informou erro.";
+    } else if (inspection?.offlineText || inspection?.ended) {
+      status = "offline";
+      detail = "Canal offline ou live encerrada.";
+    } else if (stalled) {
+      status = "stalled";
+      detail = "Player aberto, mas o vídeo não está avançando.";
+    } else if (playing) {
+      status = "playing";
+      detail = advanced
+        ? "Live reproduzindo e vídeo avançando."
+        : "Live reproduzindo; aguardando nova confirmação.";
+    } else if (playerFound && inspection?.paused) {
+      status = "paused";
+      detail = "Player encontrado, porém pausado.";
+    } else if (playerFound) {
+      status = "loaded";
+      detail = "Player encontrado, preparando reprodução.";
     }
 
-    setTimeout(() => {
-      try {
-        muteWebview(view);
-      } catch {}
-    }, 1200);
+    fenixSetExtraState107(number, {
+      currentUrl: String(inspection?.href || fenixGetWebviewUrl(view) || ""),
+      status,
+      detail,
+      pageLoaded: inspection?.documentReady === "complete" || inspection?.documentReady === "interactive",
+      liveFound: Boolean(playerFound && !inspection?.offlineText && !inspection?.ended),
+      playerFound,
+      playing,
+      stalled,
+      error: String(inspection?.videoError || ""),
+      currentTime,
+      readyState,
+      lastVideoTime: currentTime
+    });
 
     return true;
   } catch (error) {
-    console.warn("Aba extra ignorada:", error && error.message ? error.message : error);
+    fenixSetExtraState107(number, {
+      status: "error",
+      detail: "Não foi possível verificar o player.",
+      playing: false,
+      stalled: false,
+      error: String(error?.message || error || "Erro de inspeção")
+    });
+
     return false;
   }
 }
 
-if (typeof refreshScreens === "function" && !refreshScreens.__fenixExtraHiddenWrappedFinal) {
-  const originalRefreshScreensExtraHiddenFinal = refreshScreens;
+async function fenixApplyExtraTargets107(targets) {
+  const list = Array.isArray(targets) ? targets : [];
+
+  for (const number of FENIX_EXTRA_TAB_NUMBERS_107) {
+    fenixAttachExtraViewEvents107(number);
+
+    const target = list.find((item) => Number(item?.number) === number) || {
+      number,
+      enabled: false,
+      name: "",
+      url: ""
+    };
+
+    const view = fenixExtraView107(number);
+    const state = fenixExtraState107(number);
+    const targetUrl = String(target?.url || "").trim();
+    const enabled = Boolean(target?.enabled && targetUrl);
+
+    if (!view || !state) continue;
+
+    if (!enabled) {
+      if (state.enabled || state.status !== "disabled") {
+        fenixCloseExtraTab107(number, target);
+      }
+      continue;
+    }
+
+    const currentUrl = fenixGetWebviewUrl(view);
+    const targetChanged =
+      fenixNormalizeExtraUrl107(state.lastTargetUrl) !==
+      fenixNormalizeExtraUrl107(targetUrl);
+
+    fenixSetExtraState107(number, {
+      enabled: true,
+      configured: true,
+      name: String(target?.name || ""),
+      url: targetUrl,
+      currentUrl,
+      error: ""
+    });
+
+    if (
+      targetChanged ||
+      !currentUrl ||
+      currentUrl === "about:blank" ||
+      fenixNormalizeExtraUrl107(currentUrl) !== fenixNormalizeExtraUrl107(targetUrl)
+    ) {
+      fenixSetExtraState107(number, {
+        status: "loading",
+        detail: "Abrindo canal configurado...",
+        pageLoaded: false,
+        liveFound: false,
+        playerFound: false,
+        playing: false,
+        stalled: false,
+        lastTargetUrl: targetUrl,
+        lastVideoTime: 0,
+        lastProgressAtMs: 0,
+        lastProgressAt: ""
+      });
+
+      view.setAttribute("src", targetUrl);
+      view.src = targetUrl;
+    } else {
+      setTimeout(() => fenixInspectExtraTab107(number), 300);
+    }
+
+    try {
+      muteWebview(view);
+    } catch {}
+  }
+
+  return true;
+}
+
+async function fenixFetchExtraTargets107() {
+  if (fenixExtraTargetsRequest107) {
+    return fenixExtraTargetsRequest107;
+  }
+
+  fenixExtraTargetsRequest107 = (async () => {
+    try {
+      const response = await fetch(
+        CONFIG.adminApi + "/api/fenix/app/extra-targets",
+        { cache: "no-store" }
+      );
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || data.ok === false) {
+        throw new Error(data.message || "Configuração das abas extras indisponível.");
+      }
+
+      return Array.isArray(data.extraTargets) ? data.extraTargets : [];
+    } catch (error) {
+      const legacyResponse = await fetch(
+        CONFIG.adminApi + "/api/fenix/app/extra-target",
+        { cache: "no-store" }
+      );
+
+      const legacyData = await legacyResponse.json().catch(() => ({}));
+
+      if (!legacyResponse.ok || legacyData.ok === false) {
+        throw error;
+      }
+
+      return [{
+        number: 4,
+        ...(legacyData.extraTarget || {})
+      }];
+    } finally {
+      fenixExtraTargetsRequest107 = null;
+    }
+  })();
+
+  return fenixExtraTargetsRequest107;
+}
+
+async function fenixRefreshExtraTargets107() {
+  try {
+    const targets = await fenixFetchExtraTargets107();
+    await fenixApplyExtraTargets107(targets);
+    return true;
+  } catch (error) {
+    for (const number of FENIX_EXTRA_TAB_NUMBERS_107) {
+      const state = fenixExtraState107(number);
+      if (!state?.enabled) continue;
+
+      fenixSetExtraState107(number, {
+        status: "error",
+        detail: "Falha ao buscar configuração no servidor.",
+        playing: false,
+        stalled: false,
+        error: String(error?.message || error || "Erro de configuração")
+      });
+    }
+
+    console.warn("Abas extras ignoradas:", error?.message || error);
+    return false;
+  }
+}
+
+if (typeof refreshScreens === "function" && !refreshScreens.__fenixExtraTabsWrapped107) {
+  const originalRefreshScreensExtraTabs107 = refreshScreens;
 
   refreshScreens = async function(...args) {
-    const result = await originalRefreshScreensExtraHiddenFinal.apply(this, args);
+    const result = await originalRefreshScreensExtraTabs107.apply(this, args);
 
     setTimeout(() => {
-      fenixRefreshExtraHiddenTargetFinal();
+      fenixRefreshExtraTargets107();
     }, 900);
 
     return result;
   };
 
-  refreshScreens.__fenixExtraHiddenWrappedFinal = true;
+  refreshScreens.__fenixExtraTabsWrapped107 = true;
 }
 
 setTimeout(() => {
-  fenixRefreshExtraHiddenTargetFinal();
+  fenixRefreshExtraTargets107();
 }, 2500);
 
 setInterval(() => {
-  fenixRefreshExtraHiddenTargetFinal();
+  for (const number of FENIX_EXTRA_TAB_NUMBERS_107) {
+    fenixInspectExtraTab107(number);
+  }
+}, 15000);
+
+setInterval(() => {
+  fenixRefreshExtraTargets107();
 }, Math.max(60000, Number(CONFIG.cycleSeconds || 600) * 1000));
