@@ -1,12 +1,12 @@
-﻿const CONFIG = {
+const CONFIG = {
   // FENIX_LOCAL_API_OVERRIDE_105
   adminApi: localStorage.getItem("fenixApiOverride") || "https://fenix-kick-app-production.up.railway.app",
   fallbackProfile: "GokuuMods",
   refreshSeconds: 60,
   cycleSeconds: 600,
   quality: "160p",
-  weeklyGoal: 2592,
-  weeklyMinimum: 1815
+  weeklyGoal: 3024,
+  weeklyMinimum: 2722
 };
 
 let fenixSession = null;
@@ -311,28 +311,43 @@ function updateUserUi(user) {
 
   updateAdminButtonVisibility(user);
 
-  $("profileName").textContent = user.username || CONFIG.fallbackProfile;
-  $("totalPoints").textContent = Number(user.points || 0);
+  profileName.textContent = user.username || CONFIG.fallbackProfile;
+  totalPoints.textContent = Number(user.points || 0);
 
   const weeklyPoints = Number(user.weeklyPoints || 0);
-  const percent = Math.min(100, Math.floor((weeklyPoints / CONFIG.weeklyGoal) * 100));
-  const missing = Math.max(0, CONFIG.weeklyMinimum - weeklyPoints);
+  const weeklyGoal = Math.max(1, Number(user.weeklyGoal || CONFIG.weeklyGoal));
+  const weeklyMinimum = Math.max(0, Number(user.weeklyMinimum || CONFIG.weeklyMinimum));
+  const calculatedPercent = Math.floor((weeklyPoints / weeklyGoal) * 100);
+  const apiPercent = Number(user.weeklyPercent);
+  const percent = Math.max(0, Math.min(100, Number.isFinite(apiPercent) ? apiPercent : calculatedPercent));
+  const missing = Math.max(0, Number.isFinite(Number(user.weeklyMissing)) ? Number(user.weeklyMissing) : weeklyMinimum - weeklyPoints);
+  const approved = typeof user.weeklyApproved === "boolean"
+    ? user.weeklyApproved
+    : weeklyPoints >= weeklyMinimum;
+  const approvalPercent = Math.round((weeklyMinimum / weeklyGoal) * 100);
 
-  $("weeklyPoints").textContent = weeklyPoints;
-  $("weeklyGoal").textContent = CONFIG.weeklyGoal;
-  $("weeklyPercent").textContent = percent + "%";
-  $("weeklyMissing").textContent = missing;
-  $("weeklyBar").style.width = percent + "%";
+  weeklyPoints.textContent = weeklyPoints;
+  weeklyGoal.textContent = weeklyGoal;
+  weeklyGoalCard.textContent = weeklyGoal;
+  weeklyMinimum.textContent = weeklyMinimum;
+  weeklyMinimumLabel.textContent = "MINIMO " + approvalPercent + "%";
+  weeklyPercent.textContent = percent + "%";
+  weeklyMissing.textContent = missing;
+  weeklyBar.style.width = percent + "%";
 
-  if (weeklyPoints >= CONFIG.weeklyMinimum) {
-    $("weeklyStatus").textContent = "LIBERADO";
-    $("weeklyText").textContent = "Voce bateu 70% da semana e pode entrar na proxima grade.";
+  const weeklyPeriod = weeklyPeriod;
+  if (weeklyPeriod) {
+    weeklyPeriod.textContent = user.weeklyMessage || "Conta de domingo 00:00 ate sabado 23:59. Pontuacao 24/7.";
+  }
+
+  if (approved) {
+    weeklyStatus.textContent = "LIBERADO";
+    weeklyText.textContent = "Voce bateu " + approvalPercent + "% da semana e pode entrar na proxima grade.";
   } else {
-    $("weeklyStatus").textContent = "NAO LIBERADO";
-    $("weeklyText").textContent = "Continue farmando para liberar a proxima grade.";
+    weeklyStatus.textContent = "NAO LIBERADO";
+    weeklyText.textContent = "Continue farmando para liberar a proxima grade.";
   }
 }
-
 async function loginFenix() {
   const username = normalizeUsername($("loginUsername").value);
   const password = String($("loginPassword").value || "");
@@ -881,6 +896,11 @@ async function loadAdminUsers() {
       const weeklyPoints = Number(user.weeklyPoints || user.weekPoints || user.pointsWeek || 0);
       const weeklyMinutes = Number(user.weeklyMinutes || user.minutesWeek || 0);
       const totalMinutes = Number(user.totalMinutes || user.minutes || 0);
+      const weeklyGoal = Math.max(1, Number(user.weeklyGoal || CONFIG.weeklyGoal));
+      const weeklyMinimum = Math.max(0, Number(user.weeklyMinimum || CONFIG.weeklyMinimum));
+      const weeklyPercent = Math.max(0, Math.min(100, Number(user.weeklyPercent ?? Math.floor((weeklyPoints / weeklyGoal) * 100))));
+      const weeklyApproved = typeof user.weeklyApproved === "boolean" ? user.weeklyApproved : weeklyPoints >= weeklyMinimum;
+      const approvalPercent = Math.round((weeklyMinimum / weeklyGoal) * 100);
 
       const lastCycleRaw =
         user.lastCycleAt ||
@@ -905,6 +925,11 @@ async function loadAdminUsers() {
         weeklyPoints,
         weeklyMinutes,
         totalMinutes,
+        weeklyGoal,
+        weeklyMinimum,
+        weeklyPercent,
+        weeklyApproved,
+        approvalPercent,
         farmActive,
         diffMinutes,
         lastCycleRaw
@@ -945,8 +970,8 @@ async function loadAdminUsers() {
       : '<tr><td colspan="8" class="admin-empty-cell">Ninguem farmando agora.</td></tr>';
 
     const rankingRows = ranking.map((user, index) => {
-      const approved = user.weeklyPoints >= 1815;
-      const percent = Math.min(100, Math.floor((user.weeklyPoints / 2592) * 100));
+      const approved = user.weeklyApproved;
+      const percent = user.weeklyPercent;
 
       return [
         "<tr>",
@@ -956,7 +981,7 @@ async function loadAdminUsers() {
         "<td>" + user.weeklyPoints + " pontos</td>",
         "<td>" + user.points + " pontos</td>",
         "<td>" + percent + "%</td>",
-        '<td><span class="admin-pill ' + (approved ? "green" : "red") + '">' + (approved ? "Aprovado 70%" : "Pendente") + "</span></td>",
+        '<td><span class="admin-pill ' + (approved ? "green" : "red") + '">' + (approved ? "Aprovado " + user.approvalPercent + "%" : "Pendente") + "</span></td>",
         "</tr>"
       ].join("");
     }).join("");
@@ -971,7 +996,7 @@ async function loadAdminUsers() {
       "</table>",
       "</div>",
       '<div class="admin-table-card">',
-      '<div class="admin-table-title"><span>Ranking de pontos da semana</span><small>Meta 2592 pontos - minimo 70% = 1815</small></div>',
+      '<div class="admin-table-title"><span>Ranking de pontos da semana</span><small>Meta ' + (ranking[0]?.weeklyGoal || CONFIG.weeklyGoal) + ' pontos - minimo ' + (ranking[0]?.approvalPercent || 90) + '% = ' + (ranking[0]?.weeklyMinimum || CONFIG.weeklyMinimum) + '</small></div>',
       '<table class="admin-users-table">',
       '<thead><tr><th>#</th><th>Usuario</th><th>Kick</th><th>Semana</th><th>Total</th><th>% Meta</th><th>Status</th></tr></thead>',
       "<tbody>" + rankingRows + "</tbody>",
