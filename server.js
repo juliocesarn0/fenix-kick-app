@@ -1,13 +1,15 @@
-﻿import 'dotenv/config';
+import 'dotenv/config';
 import crypto from 'crypto';
 import fs from 'fs';
 import express from 'express';
 import session from 'express-session';
+import sessionFileStore from 'session-file-store';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const FileStore = sessionFileStore(session);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,23 +19,39 @@ const KICK_CLIENT_ID = process.env.KICK_CLIENT_ID || '';
 const KICK_CLIENT_SECRET = process.env.KICK_CLIENT_SECRET || '';
 const KICK_REDIRECT_URI = process.env.KICK_REDIRECT_URI || `${APP_URL}/auth/kick/callback`;
 const KICK_SCOPES = process.env.KICK_SCOPES || 'user:read channel:read';
+const FENIX_SESSION_DIR = process.env.FENIX_SESSION_DIR ||
+  (fs.existsSync('/data') ? '/data/sessions' : path.join(__dirname, 'railway-data', 'sessions'));
+const FENIX_SESSION_SECRET = process.env.SESSION_SECRET ||
+  (APP_URL.startsWith('http://localhost') ? 'fenix-local-development-only' : '');
+
+if (!FENIX_SESSION_SECRET) {
+  throw new Error('SESSION_SECRET não configurado para este ambiente.');
+}
+
+fs.mkdirSync(FENIX_SESSION_DIR, { recursive: true });
 
 const KICK_ID_URL = 'https://id.kick.com';
 const KICK_API_URL = 'https://api.kick.com/public/v1';
 
 
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 
 // FENIX_URLENCODED_LIMIT_FINAL
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ limit: '5mb', extended: true }));
 app.set('trust proxy', 1);
 app.use(
   session({
     name: 'fenix.sid',
-    secret: process.env.SESSION_SECRET || 'fenix-dev-secret-change-me',
+    store: new FileStore({
+      path: FENIX_SESSION_DIR,
+      ttl: 60 * 60 * 24 * 7,
+      retries: 1,
+      reapInterval: 60 * 60,
+      logFn: () => {}
+    }),
+    secret: FENIX_SESSION_SECRET,
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false,
     proxy: true,
     cookie: {
       httpOnly: true,
