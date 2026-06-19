@@ -696,7 +696,8 @@ async function completeCycle() {
         sessionId: fenixSession.sessionId,
         cycleKey,
         kickLoggedIn: kickTabsLoggedIn,
-        tabsKickLoggedIn: kickTabsLoggedIn
+        tabsKickLoggedIn: kickTabsLoggedIn,
+        appVersion: String(CONFIG.appVersion || '1.0.7')
       })
     });
 
@@ -2106,6 +2107,10 @@ async function sendFenixFastHeartbeat(reason = "timer") {
 
     const data = await res.json().catch(() => ({}));
 
+    if (data.updateRequired && typeof fenixShowRequiredUpdate107 === 'function') {
+      fenixShowRequiredUpdate107(data);
+    }
+
     if (!res.ok || !data.ok) {
       const msg = data.message || data.error || ("erro " + res.status);
       setFenixHeartbeatStatus(msg);
@@ -2222,6 +2227,129 @@ if (document.readyState === "loading") {
   }, 500);
 }
 
+/* FENIX_REQUIRED_UPDATE_107 */
+let fenixRequiredUpdateCheckStarted107 = false;
+
+function fenixRequiredUpdateUi107() {
+  return {
+    overlay: document.getElementById("fenixRequiredUpdateOverlay107"),
+    version: document.getElementById("fenixRequiredUpdateVersion107"),
+    status: document.getElementById("fenixRequiredUpdateStatus107"),
+    check: document.getElementById("fenixRequiredUpdateCheck107"),
+    download: document.getElementById("fenixRequiredUpdateDownload107"),
+    install: document.getElementById("fenixRequiredUpdateInstall107")
+  };
+}
+
+function fenixRequiredUpdateButtons107(mode) {
+  const ui = fenixRequiredUpdateUi107();
+  if (!ui.check || !ui.download || !ui.install) return;
+
+  ui.check.style.display = mode === "check" ? "block" : "none";
+  ui.download.style.display = mode === "download" ? "block" : "none";
+  ui.install.style.display = mode === "install" ? "block" : "none";
+
+  ui.check.disabled = mode === "busy";
+  ui.download.disabled = mode === "busy";
+  ui.install.disabled = mode === "busy";
+
+  if (mode === "busy") {
+    ui.check.style.display = "block";
+    ui.check.textContent = "Aguarde...";
+  } else {
+    ui.check.textContent = "Verificar Atualizacao";
+  }
+}
+
+function fenixHandleRequiredUpdateStatus107(payload = {}) {
+  const ui = fenixRequiredUpdateUi107();
+  if (!ui.overlay) return;
+
+  const type = String(payload.type || "");
+  const version = String(payload.version || "");
+
+  if (type === "checking") {
+    if (ui.status) ui.status.textContent = "Verificando atualizacao...";
+    fenixRequiredUpdateButtons107("busy");
+  } else if (type === "available") {
+    if (ui.status) ui.status.textContent = version
+      ? "Versao " + version + " disponivel."
+      : "Nova versao disponivel.";
+    fenixRequiredUpdateButtons107("download");
+  } else if (type === "progress") {
+    if (ui.status) ui.status.textContent =
+      "Baixando atualizacao: " + Number(payload.percent || 0) + "%";
+    fenixRequiredUpdateButtons107("busy");
+  } else if (type === "downloaded") {
+    if (ui.status) ui.status.textContent = "Atualizacao pronta para instalar.";
+    fenixRequiredUpdateButtons107("install");
+  } else if (type === "none") {
+    if (ui.status) ui.status.textContent =
+      "Atualizacao ainda nao encontrada. Tente novamente em alguns minutos.";
+    fenixRequiredUpdateButtons107("check");
+  } else if (type === "error") {
+    if (ui.status) ui.status.textContent =
+      payload.message || "Erro ao verificar atualizacao.";
+    fenixRequiredUpdateButtons107("check");
+  }
+}
+
+function fenixShowRequiredUpdate107(payload = {}) {
+  let ui = fenixRequiredUpdateUi107();
+
+  if (!ui.overlay) {
+    const overlay = document.createElement("div");
+    overlay.id = "fenixRequiredUpdateOverlay107";
+    overlay.style.cssText =
+      "position:fixed;inset:0;z-index:2147483647;display:flex;" +
+      "align-items:center;justify-content:center;padding:24px;" +
+      "background:rgba(0,0,0,.9);backdrop-filter:blur(7px)";
+
+    overlay.innerHTML = [
+      '<div style="width:min(500px,100%);padding:28px;text-align:center;color:#fff;background:#07110c;border:2px solid #00ff6a;border-radius:20px;box-shadow:0 0 45px rgba(0,255,106,.25)">',
+      '<div style="font-size:42px">⚠️</div>',
+      '<h2 style="margin:8px 0 12px;color:#00ff6a">ATUALIZACAO OBRIGATORIA</h2>',
+      '<p style="font-weight:800;line-height:1.5">Esta versao nao gera mais pontos. As abas continuam funcionando enquanto voce atualiza o Fenix.</p>',
+      '<div id="fenixRequiredUpdateVersion107" style="margin:14px 0 8px;color:#f5b22a;font-weight:900"></div>',
+      '<div id="fenixRequiredUpdateStatus107" style="min-height:42px;color:#b8c6d8">Preparando verificacao...</div>',
+      '<button id="fenixRequiredUpdateCheck107" style="width:100%;padding:14px;border-radius:12px;border:1px solid #00ff6a;background:#00ff6a;color:#021007;font-weight:1000">Verificar Atualizacao</button>',
+      '<button id="fenixRequiredUpdateDownload107" style="display:none;width:100%;padding:14px;border-radius:12px;border:1px solid #00ff6a;background:#00ff6a;color:#021007;font-weight:1000">Baixar Atualizacao</button>',
+      '<button id="fenixRequiredUpdateInstall107" style="display:none;width:100%;padding:14px;border-radius:12px;border:1px solid #00ff6a;background:#00ff6a;color:#021007;font-weight:1000">Instalar e Reiniciar</button>',
+      '</div>'
+    ].join("");
+
+    document.body.appendChild(overlay);
+
+    document.getElementById("fenixRequiredUpdateCheck107").onclick =
+      async () => window.fenixUpdater && window.fenixUpdater.check();
+
+    document.getElementById("fenixRequiredUpdateDownload107").onclick =
+      async () => window.fenixUpdater && window.fenixUpdater.download();
+
+    document.getElementById("fenixRequiredUpdateInstall107").onclick =
+      async () => window.fenixUpdater && window.fenixUpdater.install();
+
+    ui = fenixRequiredUpdateUi107();
+  }
+
+  if (ui.version) {
+    ui.version.textContent =
+      "Versao atual: " + String(CONFIG.appVersion || "-") +
+      " | Minima exigida: " + String(payload.minimumVersion || "1.0.7");
+  }
+
+  ui.overlay.style.display = "flex";
+
+  if (typeof fenixEnsureCompactUpdateButton === "function") {
+    fenixEnsureCompactUpdateButton();
+  }
+
+  if (!fenixRequiredUpdateCheckStarted107 && window.fenixUpdater) {
+    fenixRequiredUpdateCheckStarted107 = true;
+    setTimeout(() => window.fenixUpdater.check(), 700);
+  }
+}
+
 /* FENIX_AUTO_UPDATE_COMPACT_FINAL */
 function fenixEnsureCompactUpdateButton() {
   if (document.getElementById("fenixCompactUpdateBox")) return;
@@ -2279,6 +2407,10 @@ function fenixEnsureCompactUpdateButton() {
     const type = payload?.type || "";
     const version = payload?.version || "";
     const message = payload?.message || "";
+
+    if (typeof fenixHandleRequiredUpdateStatus107 === 'function') {
+      fenixHandleRequiredUpdateStatus107(payload);
+    }
 
     if (type === "checking") {
       setText("Verificando...");

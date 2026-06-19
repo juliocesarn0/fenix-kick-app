@@ -1,4 +1,4 @@
-﻿* {
+* {
   box-sizing: border-box;
 }
 
@@ -163,7 +163,9 @@ button {
   display: flex;
   flex-direction: column;
   padding: 12px 10px;
-  overflow: hidden;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .brand {

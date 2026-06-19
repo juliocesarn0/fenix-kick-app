@@ -1,6 +1,7 @@
-﻿const { autoUpdater } = require("electron-updater");
-const { app, BrowserWindow, Menu, ipcMain, session, shell, powerSaveBlocker } = require("electron");
+const { autoUpdater } = require("electron-updater");
+const { app, BrowserWindow, Menu, ipcMain, session, shell, powerSaveBlocker, screen, dialog } = require("electron");
 const path = require("path");
+const { execFile } = require("child_process");
 const fenixUserDataPath = path.join(app.getPath("appData"), "Fenix Lurk");
 
 // FENIX_NO_BACKGROUND_THROTTLE_FINAL
@@ -18,12 +19,112 @@ app.setPath("userData", fenixUserDataPath);
 
 let mainWindow = null;
 
+/* FENIX_VM_BLOCK_107 */
+function detectFenixVirtualMachine107() {
+  if (
+    process.env.FENIX_TEST_USER_DATA_DIR &&
+    process.env.FENIX_TEST_FORCE_VM === "1"
+  ) {
+    return Promise.resolve({
+      detected: true,
+      matches: ["SIMULACAO LOCAL DE VM"]
+    });
+  }
+
+  if (process.platform !== "win32") {
+    return Promise.resolve({ detected: false, matches: [] });
+  }
+
+  const command = [
+    "$ErrorActionPreference = 'SilentlyContinue'",
+    "$computer = Get-CimInstance Win32_ComputerSystem",
+    "$product = Get-CimInstance Win32_ComputerSystemProduct",
+    "$bios = Get-CimInstance Win32_BIOS",
+    "[pscustomobject]@{",
+    "Manufacturer = [string]$computer.Manufacturer",
+    "Model = [string]$computer.Model",
+    "ProductVendor = [string]$product.Vendor",
+    "ProductName = [string]$product.Name",
+    "ProductVersion = [string]$product.Version",
+    "BiosManufacturer = [string]$bios.Manufacturer",
+    "BiosVersion = [string]$bios.SMBIOSBIOSVersion",
+    "} | ConvertTo-Json -Compress"
+  ].join("; ");
+
+  return new Promise((resolve) => {
+    execFile(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        command
+      ],
+      {
+        windowsHide: true,
+        timeout: 8000,
+        maxBuffer: 1024 * 1024
+      },
+      (error, stdout) => {
+        if (error || !String(stdout || "").trim()) {
+          console.warn("Verificacao de VM indisponivel. Aplicativo liberado.");
+          return resolve({ detected: false, matches: [] });
+        }
+
+        try {
+          const info = JSON.parse(String(stdout).trim());
+          const values = [
+            info.Manufacturer,
+            info.Model,
+            info.ProductVendor,
+            info.ProductName,
+            info.ProductVersion,
+            info.BiosManufacturer,
+            info.BiosVersion
+          ]
+            .map((value) => String(value || "").trim())
+            .filter(Boolean);
+
+          const strongPattern =
+            /virtualbox|innotek|vmware|virtual machine|qemu|kvm|xen|parallels|bochs|bhyve|amazon ec2|google compute engine|digitalocean|openstack|hvm domu|rhev|red hat virtualization|nutanix|proxmox|seabios/i;
+
+          const matches = values.filter((value) => strongPattern.test(value));
+
+          return resolve({
+            detected: matches.length > 0,
+            matches
+          });
+        } catch (error) {
+          console.warn("Resposta invalida na verificacao de VM. Aplicativo liberado.");
+          return resolve({ detected: false, matches: [] });
+        }
+      }
+    );
+  });
+}
+
+function applyFenixDisplayScale(targetWindow) {
+  try {
+    if (!targetWindow || targetWindow.isDestroyed()) return;
+
+    const display = screen.getDisplayMatching(targetWindow.getBounds());
+    const displayScale = Math.max(1, Number(display?.scaleFactor || 1));
+    const zoomFactor = Math.max(0.5, Math.min(1, 1 / displayScale));
+
+    targetWindow.webContents.setZoomFactor(zoomFactor);
+  } catch (error) {
+    console.error("Erro ajustando escala do Fenix:", error);
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1366,
     height: 820,
-    minWidth: 1180,
-    minHeight: 720,
+    minWidth: 800,
+    minHeight: 520,
     title: "Fenix Lurk",
     icon: path.join(__dirname, "assets", "icon.ico"),
     backgroundColor: "#07070a",
@@ -33,6 +134,7 @@ function createWindow() {
       backgroundThrottling: false, preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
+      webSecurity: true,
       webviewTag: true,
       partition: "persist:fenix-lurk-session"
     }
@@ -42,6 +144,14 @@ function createWindow() {
 
   fenixMainWindowForUpdate = mainWindow;
   mainWindow.loadFile(path.join(__dirname, "index.html"));
+
+  mainWindow.webContents.on("did-finish-load", () => {
+    applyFenixDisplayScale(mainWindow);
+  });
+
+  mainWindow.on("move", () => {
+    applyFenixDisplayScale(mainWindow);
+  });
 
 // FENIX_BACKGROUND_MODE_105
   if (!global.fenixBackgroundMode105Registered) {
@@ -239,7 +349,25 @@ function startFenixPowerSaveBlocker() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const vmCheck107 = await detectFenixVirtualMachine107();
+
+  if (vmCheck107.detected) {
+    console.warn("Fenix bloqueado por maquina virtual:", vmCheck107.matches);
+
+    dialog.showMessageBoxSync({
+      type: "error",
+      title: "Fenix bloqueado",
+      message: "MAQUINA VIRTUAL DETECTADA",
+      detail: "O Fenix Lurk e permitido somente em PC fisico. O aplicativo sera fechado sem abrir as lives.",
+      buttons: ["Fechar"],
+      defaultId: 0,
+      noLink: true
+    });
+
+    app.quit();
+    return;
+  }
   startFenixPowerSaveBlocker();
   setupFenixAutoUpdater();
   app.setAppUserModelId("com.fenix.lurk");
