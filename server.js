@@ -1454,11 +1454,12 @@ app.get('/api/fenix/app/me', (req, res) => {
 app.post('/api/fenix/auth/reset-access', (req, res) => {
   const sessionId = String(req.body?.sessionId || '').trim();
   const username = String(req.body?.username || req.body?.userName || '').trim();
+  const deviceId = String(req.body?.deviceId || '').trim();
 
-  if (!sessionId && !username) {
+  if (!sessionId && !username && !deviceId) {
     return res.status(400).json({
       ok: false,
-      message: 'Sessao ou usuario Fenix nao informado.'
+      message: 'Sessao, usuario ou dispositivo Fenix nao informado.'
     });
   }
 
@@ -1466,19 +1467,36 @@ app.post('/api/fenix/auth/reset-access', (req, res) => {
 
   data.sessions = Array.isArray(data.sessions) ? data.sessions : [];
   data.users = Array.isArray(data.users) ? data.users : [];
+  data.deviceLocks = Array.isArray(data.deviceLocks) ? data.deviceLocks : [];
+  data.kickLocks = Array.isArray(data.kickLocks) ? data.kickLocks : [];
 
   const session = sessionId
     ? data.sessions.find((item) => item.id === sessionId || item.sessionId === sessionId)
     : null;
 
-  const user = data.users.find((item) => {
+  const targetUsername = String(username || session?.username || '').trim().toLowerCase();
+  const targetDeviceId = String(deviceId || session?.deviceId || '').trim();
+
+  const targetUsers = data.users.filter((item) => {
+    const itemUsername = String(item.username || '').toLowerCase();
+
     return (
-      (session && (item.id === session.userId || item.username === session.username)) ||
-      (username && String(item.username || '').toLowerCase() === username.toLowerCase())
+      (session && item.id === session.userId) ||
+      (targetUsername && itemUsername === targetUsername)
     );
   });
 
-  if (user) {
+  const targetUserIds = new Set(targetUsers.map((item) => String(item.id || '')).filter(Boolean));
+  const targetKickIds = new Set();
+  const targetKickNames = new Set();
+
+  targetUsers.forEach((user) => {
+    const kickId = String(user.kickUserId || user.kickId || '').trim();
+    const kickName = String(user.kickUsername || user.kickName || '').trim().toLowerCase();
+
+    if (kickId) targetKickIds.add(kickId);
+    if (kickName) targetKickNames.add(kickName);
+
     user.kickLoggedIn = false;
     user.kickConnected = false;
     user.kickUsername = '';
@@ -1489,54 +1507,64 @@ app.post('/api/fenix/auth/reset-access', (req, res) => {
     user.kickRefreshToken = '';
     user.kickLinkedAt = '';
     user.lastResetAccessAt = new Date().toISOString();
-  }
+    user.updatedAt = new Date().toISOString();
+  });
 
-  if (sessionId) {
-    data.sessions = data.sessions.filter((item) => {
-      return item.id !== sessionId && item.sessionId !== sessionId;
-    });
-  }
+  const beforeSessions = data.sessions.length;
+  data.sessions = data.sessions.filter((item) => {
+    const itemSessionId = String(item.id || item.sessionId || '');
+    const itemUserId = String(item.userId || '');
+    const itemUsername = String(item.username || '').toLowerCase();
+    const itemDeviceId = String(item.deviceId || '');
+
+    return !(
+      (sessionId && itemSessionId === sessionId) ||
+      (itemUserId && targetUserIds.has(itemUserId)) ||
+      (targetUsername && itemUsername === targetUsername) ||
+      (targetDeviceId && itemDeviceId === targetDeviceId)
+    );
+  });
+
+  const beforeDeviceLocks = data.deviceLocks.length;
+  data.deviceLocks = data.deviceLocks.filter((lock) => {
+    const lockUserId = String(lock.userId || '');
+    const lockUsername = String(lock.username || '').toLowerCase();
+    const lockDeviceId = String(lock.deviceId || '');
+
+    return !(
+      (lockUserId && targetUserIds.has(lockUserId)) ||
+      (targetUsername && lockUsername === targetUsername) ||
+      (targetDeviceId && lockDeviceId === targetDeviceId)
+    );
+  });
+
+  const beforeKickLocks = data.kickLocks.length;
+  data.kickLocks = data.kickLocks.filter((lock) => {
+    const lockUserId = String(lock.userId || '');
+    const lockUsername = String(lock.username || '').toLowerCase();
+    const lockKickId = String(lock.kickUserId || lock.kickId || '').trim();
+    const lockKickName = String(lock.kickUsername || lock.kickName || '').trim().toLowerCase();
+
+    return !(
+      (lockUserId && targetUserIds.has(lockUserId)) ||
+      (targetUsername && lockUsername === targetUsername) ||
+      (lockKickId && targetKickIds.has(lockKickId)) ||
+      (lockKickName && targetKickNames.has(lockKickName))
+    );
+  });
 
   writeFenixData(data);
 
   return res.json({
     ok: true,
-    message: 'Acesso Fenix e Kick resetado. Vincule a Kick novamente.',
-    resetUser: user ? user.username : username || ''
+    message: 'Login, sessoes, dispositivo e vinculo Kick resetados. Entre novamente e vincule a Kick.',
+    resetUsers: targetUsers.map((user) => user.username),
+    resetUsersCount: targetUsers.length,
+    removedSessions: beforeSessions - data.sessions.length,
+    removedDeviceLocks: beforeDeviceLocks - data.deviceLocks.length,
+    removedKickLocks: beforeKickLocks - data.kickLocks.length
   });
 });
-
-app.get('/api/fenix/app/current-schedule', (req, res) => {
-  const data = readFenixData();
-  const weeklyControl = ensureFenixWeeklyControlFinal(data);
-
-  if (weeklyControl.changed) {
-    writeFenixData(data);
-  }
-
-  const slot = getCurrentFenixSlot(data);
-  const notice = [...data.notices].reverse().find((item) => item.active !== false) || null;
-
-  res.json({
-    ok: true,
-    slot,
-    slots: fenixSlotToDesktopSlots(slot),
-    notice,
-    weekly: weeklyControl.info
-  });
-});
-
-app.get('/api/fenix-desktop-slots', (req, res) => {
-  const data = readFenixData();
-
-  const slot = getCurrentFenixSlot(data);
-
-  res.json({
-    ok: true,
-    slots: fenixSlotToDesktopSlots(slot)
-  });
-});
-
 app.post('/api/fenix/app/complete-cycle', (req, res) => {
   const sessionId = String(req.body?.sessionId || '').trim();
   const cycleKey = String(req.body?.cycleKey || '').trim();

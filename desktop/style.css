@@ -506,6 +506,10 @@ button {
   font-weight: 900;
 }
 
+#fenixStatus {
+  color: #31ff68;
+}
+
 #kickStatus {
   color: #ff4a4a;
 }
@@ -543,7 +547,7 @@ button {
   border-radius: 8px;
   overflow: hidden;
   display: grid;
-  grid-template-rows: 38px 1fr 34px;
+  grid-template-rows: 38px 1fr;
 }
 
 .screen-head {
@@ -621,9 +625,9 @@ webview {
 }
 
 .screen-foot {
+  display: none;
   background: #08090d;
   border-top: 1px solid #171925;
-  display: flex;
   align-items: center;
   justify-content: space-between;
   color: #aeb5c6;

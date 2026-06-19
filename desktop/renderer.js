@@ -734,16 +734,29 @@ async function clearLogin() {
     : localStorage.getItem("fenixDeviceId");
 
   const sessionId = fenixSession?.sessionId || "";
+  const username =
+    fenixSession?.user?.username ||
+    fenixSession?.username ||
+    localStorage.getItem("fenixUsername") ||
+    "";
 
   try {
-    if (sessionId) {
-      await fetch(CONFIG.adminApi + "/api/fenix/auth/reset-access", {
+    if (sessionId || username || deviceId) {
+      const response = await fetch(CONFIG.adminApi + "/api/fenix/auth/reset-access", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ sessionId })
+        body: JSON.stringify({
+          sessionId,
+          username,
+          deviceId
+        })
       });
+
+      if (!response.ok) {
+        throw new Error("Falha ao resetar acesso no servidor.");
+      }
     }
   } catch (error) {
     console.error("Erro ao resetar acesso no backend:", error);
