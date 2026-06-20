@@ -2652,16 +2652,16 @@ app.get('/api/fenix/admin/user/:username', requireFenixAdmin, fenixAdminReadRate
 
   const profile = publicFenixAdminUserProfile120(user);
 
-  // FENIX_ADMIN_USER_PROFILE_PRIORITY_122
+  // FENIX_ADMIN_USER_PROFILE_VERSION_PRIORITY_124
   profile.appVersion =
-    latestSession?.appVersion ||
     latestHeartbeat?.appVersion ||
+    latestSession?.appVersion ||
     profile.appVersion ||
     '';
 
   profile.deviceId =
-    latestSession?.deviceId ||
     latestHeartbeat?.deviceId ||
+    latestSession?.deviceId ||
     profile.deviceId ||
     '';
 
