@@ -2632,7 +2632,13 @@ app.get('/api/fenix/admin/user/:username', requireFenixAdmin, fenixAdminReadRate
         timeMs(a.lastSeenAt || a.updatedAt || a.createdAt);
     })[0] || null;
 
-  const latestHeartbeat = data.farmHeartbeats
+  // FENIX_ADMIN_USER_PROFILE_MEMORY_123
+  const memoryHeartbeat =
+    FENIX_MEMORY_HEARTBEATS.get(String(user.id || '').toLowerCase()) ||
+    FENIX_MEMORY_HEARTBEATS.get(usernameLower) ||
+    null;
+
+  const persistedHeartbeat = data.farmHeartbeats
     .filter((item) => {
       return String(item.userId || '') === userId ||
         String(item.username || '').toLowerCase() === usernameLower;
@@ -2641,6 +2647,8 @@ app.get('/api/fenix/admin/user/:username', requireFenixAdmin, fenixAdminReadRate
       return timeMs(b.lastSeenAt || b.updatedAt || b.createdAt) -
         timeMs(a.lastSeenAt || a.updatedAt || a.createdAt);
     })[0] || null;
+
+  const latestHeartbeat = memoryHeartbeat || persistedHeartbeat;
 
   const profile = publicFenixAdminUserProfile120(user);
 
