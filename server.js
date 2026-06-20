@@ -2610,9 +2610,59 @@ app.get('/api/fenix/admin/user/:username', requireFenixAdmin, fenixAdminReadRate
     return res.status(404).json({ ok: false, message: 'Usuario nao encontrado.' });
   }
 
+  // FENIX_ADMIN_USER_PROFILE_SESSION_121
+  data.sessions = Array.isArray(data.sessions) ? data.sessions : [];
+  data.farmHeartbeats = Array.isArray(data.farmHeartbeats) ? data.farmHeartbeats : [];
+
+  const userId = String(user.id || '');
+  const usernameLower = String(user.username || '').toLowerCase();
+
+  function timeMs(value) {
+    const time = new Date(value || 0).getTime();
+    return Number.isFinite(time) ? time : 0;
+  }
+
+  const latestSession = data.sessions
+    .filter((session) => {
+      return String(session.userId || '') === userId ||
+        String(session.username || '').toLowerCase() === usernameLower;
+    })
+    .sort((a, b) => {
+      return timeMs(b.lastSeenAt || b.updatedAt || b.createdAt) -
+        timeMs(a.lastSeenAt || a.updatedAt || a.createdAt);
+    })[0] || null;
+
+  const latestHeartbeat = data.farmHeartbeats
+    .filter((item) => {
+      return String(item.userId || '') === userId ||
+        String(item.username || '').toLowerCase() === usernameLower;
+    })
+    .sort((a, b) => {
+      return timeMs(b.lastSeenAt || b.updatedAt || b.createdAt) -
+        timeMs(a.lastSeenAt || a.updatedAt || a.createdAt);
+    })[0] || null;
+
+  const profile = publicFenixAdminUserProfile120(user);
+
+  profile.appVersion = profile.appVersion ||
+    latestSession?.appVersion ||
+    latestHeartbeat?.appVersion ||
+    '';
+
+  profile.deviceId = profile.deviceId ||
+    latestSession?.deviceId ||
+    latestHeartbeat?.deviceId ||
+    '';
+
+  profile.lastSeenAt = profile.lastSeenAt ||
+    latestHeartbeat?.lastSeenAt ||
+    latestHeartbeat?.updatedAt ||
+    latestSession?.lastSeenAt ||
+    '';
+
   res.json({
     ok: true,
-    user: publicFenixAdminUserProfile120(user)
+    user: profile
   });
 });
 
