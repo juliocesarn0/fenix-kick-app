@@ -2644,20 +2644,24 @@ app.get('/api/fenix/admin/user/:username', requireFenixAdmin, fenixAdminReadRate
 
   const profile = publicFenixAdminUserProfile120(user);
 
-  profile.appVersion = profile.appVersion ||
+  // FENIX_ADMIN_USER_PROFILE_PRIORITY_122
+  profile.appVersion =
     latestSession?.appVersion ||
     latestHeartbeat?.appVersion ||
+    profile.appVersion ||
     '';
 
-  profile.deviceId = profile.deviceId ||
+  profile.deviceId =
     latestSession?.deviceId ||
     latestHeartbeat?.deviceId ||
+    profile.deviceId ||
     '';
 
-  profile.lastSeenAt = profile.lastSeenAt ||
+  profile.lastSeenAt =
     latestHeartbeat?.lastSeenAt ||
     latestHeartbeat?.updatedAt ||
     latestSession?.lastSeenAt ||
+    profile.lastSeenAt ||
     '';
 
   res.json({
