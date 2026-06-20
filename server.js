@@ -1670,6 +1670,44 @@ app.post('/api/fenix/auth/reset-access', (req, res) => {
     removedKickLocks: beforeKickLocks - data.kickLocks.length
   });
 });
+
+
+// FENIX_APP_CURRENT_SCHEDULE_COMPAT_107
+app.get('/api/fenix/app/current-schedule', (req, res) => {
+  try {
+    const data = readFenixData();
+
+    data.schedule = Array.isArray(data.schedule) ? data.schedule : [];
+    data.notices = Array.isArray(data.notices) ? data.notices : [];
+
+    const slot = getCurrentFenixSlot(data);
+    const slots = fenixSlotToDesktopSlots(slot);
+    const notice = data.notices.find((item) => item && item.active !== false && String(item.message || '').trim()) || null;
+
+    res.json({
+      ok: true,
+      time: new Date().toISOString(),
+      slot,
+      slots,
+      notice: notice
+        ? {
+            id: notice.id || null,
+            message: notice.message || '',
+            createdAt: notice.createdAt || null,
+            updatedAt: notice.updatedAt || null
+          }
+        : null
+    });
+  } catch (error) {
+    console.error('Erro em /api/fenix/app/current-schedule:', error);
+    res.status(500).json({
+      ok: false,
+      message: 'Erro ao carregar grade atual.',
+      error: error.message || String(error)
+    });
+  }
+});
+
 app.post('/api/fenix/app/complete-cycle', fenixCycleRateLimitFinal, (req, res) => {
   const sessionId = String(req.body?.sessionId || '').trim();
   const cycleKey = String(req.body?.cycleKey || '').trim();
