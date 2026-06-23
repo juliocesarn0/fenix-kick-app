@@ -5770,6 +5770,24 @@ function fenixTopUsersBySize130(users) {
     .slice(0, 15);
 }
 
+// FENIX_ADMIN_TOP_LEVEL_KEYS_131
+function fenixTopLevelSizes131(data) {
+  if (!data || typeof data !== 'object') return [];
+
+  return Object.keys(data)
+    .map((key) => {
+      const value = data[key];
+
+      return {
+        key,
+        type: Array.isArray(value) ? 'array' : typeof value,
+        count: fenixCountCollection129(value),
+        sizeMb: fenixJsonSizeMb130(value)
+      };
+    })
+    .sort((a, b) => b.sizeMb - a.sizeMb);
+}
+
 function fenixBackupsInfo129() {
   try {
     fs.mkdirSync(FENIX_BACKUP_DIR, { recursive: true });
@@ -5850,6 +5868,7 @@ app.get('/api/fenix/admin/diagnostics', requireFenixAdmin, (req, res) => {
         extraTargets: fenixJsonSizeMb130(data.extraTargets)
       },
       largestUsers: fenixTopUsersBySize130(data.users),
+      topLevelSizes: fenixTopLevelSizes131(data),
       memory: {
         rssMb: fenixBytesToMb129(memory.rss),
         heapUsedMb: fenixBytesToMb129(memory.heapUsed),
@@ -5905,6 +5924,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
