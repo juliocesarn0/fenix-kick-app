@@ -5744,6 +5744,32 @@ function fenixBytesToMb129(bytes) {
   return Math.round((Number(bytes || 0) / 1024 / 1024) * 100) / 100;
 }
 
+// FENIX_ADMIN_DIAGNOSTICS_SIZES_130
+function fenixJsonSizeMb130(value) {
+  try {
+    return fenixBytesToMb129(Buffer.byteLength(JSON.stringify(value || null), 'utf8'));
+  } catch (error) {
+    return 0;
+  }
+}
+
+function fenixTopUsersBySize130(users) {
+  const list = Array.isArray(users) ? users : [];
+
+  return list
+    .map((user) => ({
+      username: user.username || user.name || '-',
+      kickUsername: user.kickUsername || user.kickName || '-',
+      sizeMb: fenixJsonSizeMb130(user),
+      sessions: Array.isArray(user.sessions) ? user.sessions.length : 0,
+      cycles: Array.isArray(user.cycles) ? user.cycles.length : 0,
+      history: Array.isArray(user.history) ? user.history.length : 0,
+      heartbeats: Array.isArray(user.heartbeats) ? user.heartbeats.length : 0
+    }))
+    .sort((a, b) => b.sizeMb - a.sizeMb)
+    .slice(0, 15);
+}
+
 function fenixBackupsInfo129() {
   try {
     fs.mkdirSync(FENIX_BACKUP_DIR, { recursive: true });
@@ -5814,6 +5840,16 @@ app.get('/api/fenix/admin/diagnostics', requireFenixAdmin, (req, res) => {
         draws: fenixCountCollection129(data.draws),
         extraTargets: fenixCountCollection129(data.extraTargets)
       },
+      sizesMb: {
+        users: fenixJsonSizeMb130(data.users),
+        sessions: fenixJsonSizeMb130(data.sessions),
+        schedule: fenixJsonSizeMb130(data.schedule),
+        weeklyHistory: fenixJsonSizeMb130(data.weeklyHistory),
+        drawApplicants: fenixJsonSizeMb130(data.drawApplicants),
+        draws: fenixJsonSizeMb130(data.draws),
+        extraTargets: fenixJsonSizeMb130(data.extraTargets)
+      },
+      largestUsers: fenixTopUsersBySize130(data.users),
       memory: {
         rssMb: fenixBytesToMb129(memory.rss),
         heapUsedMb: fenixBytesToMb129(memory.heapUsed),
@@ -5869,6 +5905,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
