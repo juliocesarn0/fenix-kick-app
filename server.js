@@ -5920,10 +5920,117 @@ app.post('/api/fenix/admin/maintenance/cleanup-backups', requireFenixAdmin, (req
     });
   }
 });
+
+// FENIX_ADMIN_CYCLES_CLEANUP_132
+function fenixCycleDate132(cycle) {
+  if (!cycle || typeof cycle !== 'object') return null;
+
+  const candidates = [
+    cycle.createdAt,
+    cycle.completedAt,
+    cycle.updatedAt,
+    cycle.at,
+    cycle.date,
+    cycle.timestamp,
+    cycle.finishedAt
+  ];
+
+  for (const value of candidates) {
+    if (!value) continue;
+
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+
+  return null;
+}
+
+app.post('/api/fenix/admin/maintenance/cleanup-cycles', requireFenixAdmin, (req, res) => {
+  try {
+    const keepDays = Math.max(1, Math.min(60, Number(req.body?.keepDays || req.query?.keepDays || 7)));
+    const dryRun = String(req.body?.dryRun ?? req.query?.dryRun ?? 'true').toLowerCase() !== 'false';
+
+    if (!fs.existsSync(FENIX_DATA_FILE)) {
+      return res.status(404).json({
+        ok: false,
+        message: 'Arquivo de dados Fenix nao encontrado.'
+      });
+    }
+
+    const raw = fs.readFileSync(FENIX_DATA_FILE, 'utf8');
+    const data = JSON.parse(raw);
+    const cycles = Array.isArray(data.cycles) ? data.cycles : [];
+
+    const now = Date.now();
+    const cutoff = now - keepDays * 24 * 60 * 60 * 1000;
+
+    let withoutDate = 0;
+    let kept = 0;
+    let removed = 0;
+
+    const nextCycles = cycles.filter((cycle) => {
+      const date = fenixCycleDate132(cycle);
+
+      if (!date) {
+        withoutDate += 1;
+        kept += 1;
+        return true;
+      }
+
+      if (date.getTime() >= cutoff) {
+        kept += 1;
+        return true;
+      }
+
+      removed += 1;
+      return false;
+    });
+
+    const beforeSizeMb = fenixJsonSizeMb130(cycles);
+    const afterSizeMb = fenixJsonSizeMb130(nextCycles);
+
+    if (!dryRun) {
+      createFenixDataBackup('before-cleanup-cycles', true);
+
+      data.cycles = nextCycles;
+
+      const tempFile = `${FENIX_DATA_FILE}.tmp-${process.pid}-${Date.now()}`;
+      fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf8');
+      JSON.parse(fs.readFileSync(tempFile, 'utf8'));
+      fs.renameSync(tempFile, FENIX_DATA_FILE);
+
+      FENIX_DATA_MEMORY_CACHE = normalizeFenixDataShape(data);
+    }
+
+    return res.json({
+      ok: true,
+      dryRun,
+      keepDays,
+      cutoff: new Date(cutoff).toISOString(),
+      before: cycles.length,
+      after: nextCycles.length,
+      removed,
+      kept,
+      withoutDate,
+      beforeSizeMb,
+      afterSizeMb,
+      savedSizeMb: Math.round((beforeSizeMb - afterSizeMb) * 100) / 100,
+      message: dryRun
+        ? 'Previa concluida. Nenhum cycle foi apagado.'
+        : 'Limpeza de cycles concluida.'
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message || String(error)
+    });
+  }
+});
 app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
