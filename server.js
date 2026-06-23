@@ -6026,10 +6026,91 @@ app.post('/api/fenix/admin/maintenance/cleanup-cycles', requireFenixAdmin, (req,
     });
   }
 });
+
+// FENIX_AUTO_CYCLES_CLEANUP_133
+const FENIX_AUTO_CYCLES_KEEP_DAYS_133 = Number(process.env.FENIX_AUTO_CYCLES_KEEP_DAYS || 3);
+const FENIX_AUTO_CYCLES_INTERVAL_MS_133 = 20 * 60 * 60 * 1000;
+let FENIX_AUTO_CYCLES_RUNNING_133 = false;
+
+function fenixAutoCleanupCycles133(source = 'auto') {
+  if (FENIX_AUTO_CYCLES_RUNNING_133) return;
+
+  FENIX_AUTO_CYCLES_RUNNING_133 = true;
+
+  try {
+    if (!fs.existsSync(FENIX_DATA_FILE)) return;
+
+    const raw = fs.readFileSync(FENIX_DATA_FILE, 'utf8');
+    const data = JSON.parse(raw);
+
+    const maintenance = data.maintenance && typeof data.maintenance === 'object'
+      ? data.maintenance
+      : {};
+
+    const lastAt = maintenance.lastCyclesAutoCleanupAt
+      ? new Date(maintenance.lastCyclesAutoCleanupAt).getTime()
+      : 0;
+
+    const now = Date.now();
+
+    if (lastAt && now - lastAt < FENIX_AUTO_CYCLES_INTERVAL_MS_133) {
+      return;
+    }
+
+    const cycles = Array.isArray(data.cycles) ? data.cycles : [];
+    const keepDays = Math.max(1, Math.min(30, FENIX_AUTO_CYCLES_KEEP_DAYS_133));
+    const cutoff = now - keepDays * 24 * 60 * 60 * 1000;
+
+    let removed = 0;
+
+    const nextCycles = cycles.filter((cycle) => {
+      const date = fenixCycleDate132(cycle);
+
+      if (!date) return true;
+
+      if (date.getTime() >= cutoff) return true;
+
+      removed += 1;
+      return false;
+    });
+
+    data.maintenance = {
+      ...maintenance,
+      lastCyclesAutoCleanupAt: new Date(now).toISOString(),
+      lastCyclesAutoCleanupSource: source,
+      lastCyclesAutoCleanupKeepDays: keepDays,
+      lastCyclesAutoCleanupRemoved: removed,
+      lastCyclesAutoCleanupBefore: cycles.length,
+      lastCyclesAutoCleanupAfter: nextCycles.length
+    };
+
+    if (removed > 0) {
+      createFenixDataBackup('before-auto-cleanup-cycles', true);
+      data.cycles = nextCycles;
+    }
+
+    const tempFile = `${FENIX_DATA_FILE}.tmp-${process.pid}-${Date.now()}`;
+    fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf8');
+    JSON.parse(fs.readFileSync(tempFile, 'utf8'));
+    fs.renameSync(tempFile, FENIX_DATA_FILE);
+
+    FENIX_DATA_MEMORY_CACHE = normalizeFenixDataShape(data);
+
+    console.log(`[FENIX] Auto cleanup cycles (${source}): removed=${removed}, keepDays=${keepDays}, before=${cycles.length}, after=${nextCycles.length}`);
+  } catch (error) {
+    console.warn('[FENIX] Auto cleanup cycles falhou:', error.message || error);
+  } finally {
+    FENIX_AUTO_CYCLES_RUNNING_133 = false;
+  }
+}
+
+setTimeout(() => fenixAutoCleanupCycles133('startup'), 2 * 60 * 1000);
+setInterval(() => fenixAutoCleanupCycles133('interval'), FENIX_AUTO_CYCLES_INTERVAL_MS_133);
 app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
