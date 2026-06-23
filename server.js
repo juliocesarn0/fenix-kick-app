@@ -402,7 +402,7 @@ const FENIX_MIN_POINTS_APP_VERSION = String(process.env.FENIX_MIN_POINTS_APP_VER
 const FENIX_DATA_DIR = process.env.FENIX_DATA_DIR || (fs.existsSync('/data') ? '/data' : path.join(__dirname, 'backend', 'data'));
 const FENIX_DATA_FILE = path.join(FENIX_DATA_DIR, 'fenix-data.json');
 const FENIX_BACKUP_DIR = path.join(FENIX_DATA_DIR, 'backups');
-const FENIX_MAX_BACKUPS = Number(process.env.FENIX_MAX_BACKUPS || 200);
+const FENIX_MAX_BACKUPS = Number(process.env.FENIX_MAX_BACKUPS || 30);
 let FENIX_LAST_BACKUP_AT = 0;
 console.log('Fenix data file:', FENIX_DATA_FILE);
 console.log('Fenix backup dir:', FENIX_BACKUP_DIR);
@@ -5732,10 +5732,144 @@ app.get('/api/fenix/app/extra-targets', (req, res) => {
     extraTargets: fenixGetExtraTargetsFinal(data)
   });
 });
+
+// FENIX_ADMIN_DIAGNOSTICS_129
+function fenixCountCollection129(value) {
+  if (Array.isArray(value)) return value.length;
+  if (value && typeof value === 'object') return Object.keys(value).length;
+  return 0;
+}
+
+function fenixBytesToMb129(bytes) {
+  return Math.round((Number(bytes || 0) / 1024 / 1024) * 100) / 100;
+}
+
+function fenixBackupsInfo129() {
+  try {
+    fs.mkdirSync(FENIX_BACKUP_DIR, { recursive: true });
+
+    const files = fs.readdirSync(FENIX_BACKUP_DIR)
+      .filter((name) => name.startsWith('fenix-data-') && name.endsWith('.json'))
+      .sort();
+
+    let totalBytes = 0;
+
+    const items = files.map((name) => {
+      const file = path.join(FENIX_BACKUP_DIR, name);
+      const stat = fs.statSync(file);
+      totalBytes += stat.size;
+
+      return {
+        name,
+        sizeMb: fenixBytesToMb129(stat.size),
+        modifiedAt: stat.mtime.toISOString()
+      };
+    });
+
+    return {
+      count: items.length,
+      maxConfigured: FENIX_MAX_BACKUPS,
+      totalSizeMb: fenixBytesToMb129(totalBytes),
+      oldest: items[0] || null,
+      newest: items[items.length - 1] || null
+    };
+  } catch (error) {
+    return {
+      count: 0,
+      maxConfigured: FENIX_MAX_BACKUPS,
+      totalSizeMb: 0,
+      error: error.message || String(error)
+    };
+  }
+}
+
+app.get('/api/fenix/admin/diagnostics', requireFenixAdmin, (req, res) => {
+  try {
+    let data = {};
+    let dataSizeBytes = 0;
+
+    if (fs.existsSync(FENIX_DATA_FILE)) {
+      const raw = fs.readFileSync(FENIX_DATA_FILE, 'utf8');
+      dataSizeBytes = Buffer.byteLength(raw, 'utf8');
+      data = JSON.parse(raw);
+    }
+
+    const memory = process.memoryUsage();
+
+    return res.json({
+      ok: true,
+      now: new Date().toISOString(),
+      uptimeSeconds: Math.round(process.uptime()),
+      dataFile: {
+        path: FENIX_DATA_FILE,
+        sizeMb: fenixBytesToMb129(dataSizeBytes)
+      },
+      backups: fenixBackupsInfo129(),
+      counts: {
+        users: fenixCountCollection129(data.users),
+        sessions: fenixCountCollection129(data.sessions),
+        schedule: fenixCountCollection129(data.schedule),
+        weeklyHistory: fenixCountCollection129(data.weeklyHistory),
+        drawApplicants: fenixCountCollection129(data.drawApplicants),
+        draws: fenixCountCollection129(data.draws),
+        extraTargets: fenixCountCollection129(data.extraTargets)
+      },
+      memory: {
+        rssMb: fenixBytesToMb129(memory.rss),
+        heapUsedMb: fenixBytesToMb129(memory.heapUsed),
+        heapTotalMb: fenixBytesToMb129(memory.heapTotal),
+        externalMb: fenixBytesToMb129(memory.external)
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message || String(error)
+    });
+  }
+});
+
+app.post('/api/fenix/admin/maintenance/cleanup-backups', requireFenixAdmin, (req, res) => {
+  try {
+    fs.mkdirSync(FENIX_BACKUP_DIR, { recursive: true });
+
+    const keep = Math.max(5, Math.min(200, Number(req.body?.keep || req.query?.keep || 30)));
+
+    const files = fs.readdirSync(FENIX_BACKUP_DIR)
+      .filter((name) => name.startsWith('fenix-data-') && name.endsWith('.json'))
+      .sort();
+
+    const before = files.length;
+    const removed = [];
+
+    while (files.length > keep) {
+      const oldFile = files.shift();
+      fs.unlinkSync(path.join(FENIX_BACKUP_DIR, oldFile));
+      removed.push(oldFile);
+    }
+
+    return res.json({
+      ok: true,
+      message: 'Limpeza de backups concluida.',
+      before,
+      after: files.length,
+      keep,
+      removedCount: removed.length,
+      removedPreview: removed.slice(0, 20),
+      backups: fenixBackupsInfo129()
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message || String(error)
+    });
+  }
+});
 app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
