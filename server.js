@@ -2849,6 +2849,9 @@ app.post('/api/fenix/admin/user/delete', requireFenixAdmin, (req, res) => {
         })
       : [];
 
+    // FENIX_ADMIN_PERMANENT_DELETE_ALLOW_SHRINK_136
+    data.__allowDangerousShrink = true;
+
     writeFenixData(data);
 
     return res.json({
@@ -2863,10 +2866,6 @@ app.post('/api/fenix/admin/user/delete', requireFenixAdmin, (req, res) => {
   user.deletedReason = reason;
   user.updatedAt = new Date().toISOString();
 
-  // FENIX_ADMIN_PERMANENT_DELETE_ALLOW_SHRINK_135
-  if (permanent) {
-    data.__allowDangerousShrink = true;
-  }
 
   writeFenixData(data);
 
@@ -6115,6 +6114,8 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
+
 
 
 
