@@ -6110,10 +6110,34 @@ function fenixAutoCleanupCycles133(source = 'auto') {
 
 setTimeout(() => fenixAutoCleanupCycles133('startup'), 2 * 60 * 1000);
 setInterval(() => fenixAutoCleanupCycles133('interval'), FENIX_AUTO_CYCLES_INTERVAL_MS_133);
+
+// FENIX_API_JSON_ERROR_HANDLER_137
+app.use((err, req, res, next) => {
+  try {
+    const message = err && err.message ? err.message : String(err || 'Erro interno no servidor.');
+    console.error('[FENIX_API_ERROR_137]', req.method, req.originalUrl || req.url, message, err && err.stack ? err.stack : '');
+
+    if (String(req.originalUrl || req.url || '').startsWith('/api/')) {
+      if (res.headersSent) return next(err);
+
+      return res.status(500).json({
+        ok: false,
+        message,
+        route: req.originalUrl || req.url || '',
+        code: 'FENIX_API_INTERNAL_ERROR_137'
+      });
+    }
+
+    return next(err);
+  } catch (handlerError) {
+    return next(handlerError);
+  }
+});
 app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
