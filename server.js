@@ -6029,7 +6029,7 @@ app.post('/api/fenix/admin/maintenance/cleanup-cycles', requireFenixAdmin, (req,
 
 // FENIX_AUTO_CYCLES_CLEANUP_133
 const FENIX_AUTO_CYCLES_KEEP_DAYS_133 = Number(process.env.FENIX_AUTO_CYCLES_KEEP_DAYS || 3);
-const FENIX_AUTO_CYCLES_INTERVAL_MS_133 = 20 * 60 * 60 * 1000;
+const FENIX_AUTO_CYCLES_INTERVAL_MS_133 = 6 * 60 * 60 * 1000;
 let FENIX_AUTO_CYCLES_RUNNING_133 = false;
 
 function fenixAutoCleanupCycles133(source = 'auto') {
@@ -6110,6 +6110,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
