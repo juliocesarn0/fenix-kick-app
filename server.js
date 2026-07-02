@@ -434,6 +434,28 @@ const FENIX_APP_ME_CACHE_MS = 15000;
 
 fs.mkdirSync(FENIX_DATA_DIR, { recursive: true });
 
+
+// FENIX_BLOCK_OLD_APP_VERSION_141
+function fenixOldAppBlockedResponse141(appVersion, message = 'Atualizacao obrigatoria. Esta versao nao pode abrir farm nem abas.') {
+  return {
+    ok: false,
+    blocked: true,
+    updateRequired: true,
+    pointsEnabled: false,
+    currentVersion: appVersion || 'nao-informada',
+    minimumVersion: FENIX_MIN_POINTS_APP_VERSION,
+    message
+  };
+}
+
+function fenixRequestAppVersion141(req) {
+  return String(
+    req.body?.appVersion ||
+    req.query?.appVersion ||
+    req.headers['x-fenix-app-version'] ||
+    ''
+  ).trim().slice(0, 30);
+}
 function createDefaultFenixData() {
   return {
     users: [],
@@ -1799,6 +1821,15 @@ app.post('/api/fenix/auth/reset-access', (req, res) => {
 // FENIX_APP_CURRENT_SCHEDULE_COMPAT_107
 app.get('/api/fenix/app/current-schedule', (req, res) => {
   try {
+    const appVersion = fenixRequestAppVersion141(req);
+
+    if (appVersion && !fenixAppVersionCanEarnPoints(appVersion)) {
+      return res.status(426).json(fenixOldAppBlockedResponse141(
+        appVersion,
+        'Atualizacao obrigatoria. Esta versao nao pode carregar grade, farm ou abas.'
+      ));
+    }
+
     const data = readFenixData();
 
     data.schedule = Array.isArray(data.schedule) ? data.schedule : [];
@@ -1870,7 +1901,7 @@ app.post('/api/fenix/app/complete-cycle', fenixCycleRateLimitFinal, (req, res) =
       updateRequired: true,
       currentVersion: appVersion || 'nao-informada',
       minimumVersion: FENIX_MIN_POINTS_APP_VERSION,
-      message: 'Atualizacao obrigatoria. As abas continuam liberadas, mas esta versao nao gera pontos.'
+      message: 'Atualizacao obrigatoria. Esta versao nao pode abrir farm, abas ou gerar pontos.'
     });
   }
 
@@ -2128,6 +2159,19 @@ app.post('/api/fenix/app/heartbeat', fenixHeartbeatRateLimitFinal, (req, res) =>
   const deviceId = String(req.body?.deviceId || session.deviceId || '').trim().slice(0, 150);
   const extraTabs = fenixNormalizeExtraTabsHeartbeatFinal(req.body?.extraTabs);
   const versionCanEarnPoints = fenixAppVersionCanEarnPoints(appVersion);
+
+  if (!versionCanEarnPoints) {
+    return res.status(426).json({
+      ...fenixOldAppBlockedResponse141(
+        appVersion,
+        'Atualizacao obrigatoria. Esta versao nao pode manter farm, abas ou status online.'
+      ),
+      saved: false,
+      memoryOnly: true,
+      heartbeat: null,
+      extraTargets: []
+    });
+  }
 
   session.lastSeenAt = now;
   session.updatedAt = now;
@@ -6272,6 +6316,8 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
+
 
 
 
