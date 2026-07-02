@@ -614,6 +614,19 @@ let FENIX_DATA_PENDING_WRITE_REASON_129 = '';
 let FENIX_DATA_WRITE_TIMER_129 = null;
 let FENIX_DATA_LAST_WRITE_STARTED_AT_129 = 0;
 let FENIX_DATA_LAST_WRITE_FINISHED_AT_129 = 0;
+let FENIX_DATA_LAST_COUNTS_129 = null;
+
+function fenixGetDataCounts129(data) {
+  return {
+    users: Array.isArray(data?.users) ? data.users.length : 0,
+    schedule: Array.isArray(data?.schedule) ? data.schedule.length : 0,
+    cycles: Array.isArray(data?.cycles) ? data.cycles.length : 0
+  };
+}
+
+function fenixRememberDataCounts129(data) {
+  FENIX_DATA_LAST_COUNTS_129 = fenixGetDataCounts129(data);
+}
 
 function fenixWriteJsonToDiskSync129(json) {
   fs.mkdirSync(FENIX_DATA_DIR, { recursive: true });
@@ -649,6 +662,7 @@ function flushFenixDataWriteQueue129(reason = 'manual') {
 
     const json = fenixBuildDataJson129(dataToWrite);
     fenixWriteJsonToDiskSync129(json);
+    fenixRememberDataCounts129(dataToWrite);
 
     FENIX_DATA_LAST_WRITE_FINISHED_AT_129 = Date.now();
     return true;
@@ -711,21 +725,21 @@ process.on('exit', () => {
 });
 
 function writeFenixData(data) {
-  const nextData = normalizeFenixDataShape(data);
+  const nextData = data === FENIX_DATA_MEMORY_CACHE
+    ? data
+    : normalizeFenixDataShape(data);
+
+  const previousCounts = FENIX_DATA_LAST_COUNTS_129 || fenixGetDataCounts129(FENIX_DATA_MEMORY_CACHE || nextData);
   const allowDangerousShrink = nextData.__allowDangerousShrink === true;
 
   if (Object.prototype.hasOwnProperty.call(nextData, '__allowDangerousShrink')) {
     delete nextData.__allowDangerousShrink;
   }
 
-  const currentData = FENIX_DATA_MEMORY_CACHE
-    ? FENIX_DATA_MEMORY_CACHE
-    : (fs.existsSync(FENIX_DATA_FILE) ? normalizeFenixDataShape(JSON.parse(fs.readFileSync(FENIX_DATA_FILE, 'utf8'))) : null);
-
-  if (currentData && !allowDangerousShrink) {
-    const currentUsers = Array.isArray(currentData.users) ? currentData.users.length : 0;
+  if (previousCounts && !allowDangerousShrink) {
+    const currentUsers = previousCounts.users;
     const nextUsers = Array.isArray(nextData.users) ? nextData.users.length : 0;
-    const currentSchedule = Array.isArray(currentData.schedule) ? currentData.schedule.length : 0;
+    const currentSchedule = previousCounts.schedule;
     const nextSchedule = Array.isArray(nextData.schedule) ? nextData.schedule.length : 0;
 
     if (currentUsers > 0 && nextUsers < currentUsers) {
@@ -747,16 +761,12 @@ function writeFenixData(data) {
     }
   }
 
-  const currentUsersCount = currentData && Array.isArray(currentData.users) ? currentData.users.length : 0;
-  const currentScheduleCount = currentData && Array.isArray(currentData.schedule) ? currentData.schedule.length : 0;
-  const currentCyclesCount = currentData && Array.isArray(currentData.cycles) ? currentData.cycles.length : 0;
-
   const forceBackup =
-    currentData &&
+    previousCounts &&
     (
-      nextData.users.length !== currentUsersCount ||
-      nextData.schedule.length !== currentScheduleCount ||
-      nextData.cycles.length < currentCyclesCount
+      nextData.users.length !== previousCounts.users ||
+      nextData.schedule.length !== previousCounts.schedule ||
+      nextData.cycles.length < previousCounts.cycles
     );
 
   if (forceBackup) {
@@ -773,6 +783,10 @@ function writeFenixData(data) {
     immediateWrite ? 'immediate-critical' : 'debounced-normal',
     immediateWrite
   );
+
+  if (immediateWrite) {
+    fenixRememberDataCounts129(nextData);
+  }
 }
 /* FIM_FENIX_DATA_PROTECTION_20260612 */
 
@@ -6243,6 +6257,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
