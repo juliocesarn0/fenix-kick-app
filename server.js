@@ -5989,8 +5989,9 @@ function fenixRenderGradePage(req, res) {
   }
 
   const days = [];
-  for (let i = 0; i < 7; i += 1) {
-    const dateKey = fenixWeeklyAddDaysFinal(weeklyInfo.weekStart, i);
+  const fenixGradeDayOrder143 = [1, 2, 3, 4, 5, 6, 0];
+  for (const offset of fenixGradeDayOrder143) {
+    const dateKey = fenixWeeklyAddDaysFinal(weeklyInfo.weekStart, offset);
     days.push({ date: dateKey, label: fenixGradeDayLabelFromDate143(dateKey) });
   }
 
