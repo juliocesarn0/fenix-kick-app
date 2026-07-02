@@ -5664,6 +5664,7 @@ app.post('/api/fenix/admin/maintenance/cleanup-cycles', requireFenixAdmin, (req,
     const keepDays = Math.max(1, Math.min(60, Number(req.body?.keepDays || req.query?.keepDays || 1)));
     const dryRun = String(req.body?.dryRun ?? req.query?.dryRun ?? 'true').toLowerCase() !== 'false';
 
+    flushFenixDataWriteQueue129('before-cleanup-cycles-read');
     if (!fs.existsSync(FENIX_DATA_FILE)) {
       return res.status(404).json({
         ok: false,
@@ -5752,6 +5753,7 @@ function fenixAutoCleanupCycles133(source = 'auto') {
   FENIX_AUTO_CYCLES_RUNNING_133 = true;
 
   try {
+    flushFenixDataWriteQueue129('before-auto-cleanup-cycles-read');
     if (!fs.existsSync(FENIX_DATA_FILE)) return;
 
     const raw = fs.readFileSync(FENIX_DATA_FILE, 'utf8');
