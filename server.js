@@ -5893,6 +5893,7 @@ app.get('/fenix/grade/kick-login', requireKickConfig, (req, res) => {
     state
   });
 
+  console.log('[FENIX_GRADE_DEBUG] URL Kick:', 'https://id.kick.com/oauth/authorize?' + params.toString());
   res.redirect('https://id.kick.com/oauth/authorize?' + params.toString());
 });
 
