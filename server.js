@@ -5974,11 +5974,14 @@ app.post('/fenix/grade/logout', (req, res) => {
 function fenixRenderGradePage(req, res) {
   const data = readFenixData();
   const weeklyInfo = fenixWeeklyInfoFinal();
+  const civilMonday = fenixMondayOfWeekFinal(new Date());
+  const civilWeekStart = fenixDateOnlyFinal(civilMonday);
+  const civilWeekEnd = fenixDateOnlyFinal(fenixAddDaysFinal(civilMonday, 6));
 
   data.schedule = Array.isArray(data.schedule) ? data.schedule : [];
 
   const weekSlots = data.schedule.filter((slot) => {
-    return slot && slot.slotDate >= weeklyInfo.weekStart && slot.slotDate <= weeklyInfo.weekEnd;
+    return slot && slot.slotDate >= civilWeekStart && slot.slotDate <= civilWeekEnd;
   });
 
   const byDate = {};
@@ -5989,9 +5992,8 @@ function fenixRenderGradePage(req, res) {
   }
 
   const days = [];
-  const fenixGradeDayOrder143 = [1, 2, 3, 4, 5, 6, 0];
-  for (const offset of fenixGradeDayOrder143) {
-    const dateKey = fenixWeeklyAddDaysFinal(weeklyInfo.weekStart, offset);
+  for (let offset = 0; offset < 7; offset += 1) {
+    const dateKey = fenixDateOnlyFinal(fenixAddDaysFinal(civilMonday, offset));
     days.push({ date: dateKey, label: fenixGradeDayLabelFromDate143(dateKey) });
   }
 
@@ -6058,7 +6060,7 @@ function fenixRenderGradePage(req, res) {
   <header>
     <div>
       <h1>Grade Fenix Lurk</h1>
-      <div class="muted">Semana ${weeklyInfo.weekStart} a ${weeklyInfo.weekEnd} · Logado como ${fenixHtmlEscape(req.session.fenixGradeUser)}</div>
+      <div class="muted">Semana ${civilWeekStart} a ${civilWeekEnd} · Logado como ${fenixHtmlEscape(req.session.fenixGradeUser)}</div>
     </div>
     <form class="logout" method="POST" action="/fenix/grade/logout">
       <button class="logoutBtn" type="submit">Sair</button>
