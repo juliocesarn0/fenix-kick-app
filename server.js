@@ -616,14 +616,14 @@ function writeFenixData(data) {
   }
 
   const currentData = FENIX_DATA_MEMORY_CACHE
-    ? normalizeFenixDataShape(FENIX_DATA_MEMORY_CACHE)
+    ? FENIX_DATA_MEMORY_CACHE
     : (fs.existsSync(FENIX_DATA_FILE) ? normalizeFenixDataShape(JSON.parse(fs.readFileSync(FENIX_DATA_FILE, 'utf8'))) : null);
 
   if (currentData && !allowDangerousShrink) {
-    const currentUsers = currentData.users.length;
-    const nextUsers = nextData.users.length;
-    const currentSchedule = currentData.schedule.length;
-    const nextSchedule = nextData.schedule.length;
+    const currentUsers = Array.isArray(currentData.users) ? currentData.users.length : 0;
+    const nextUsers = Array.isArray(nextData.users) ? nextData.users.length : 0;
+    const currentSchedule = Array.isArray(currentData.schedule) ? currentData.schedule.length : 0;
+    const nextSchedule = Array.isArray(nextData.schedule) ? nextData.schedule.length : 0;
 
     if (currentUsers > 0 && nextUsers < currentUsers) {
       createFenixDataBackup('blocked-users-shrink', true);
@@ -658,16 +658,14 @@ function writeFenixData(data) {
   fs.mkdirSync(FENIX_DATA_DIR, { recursive: true });
 
   const tempFile = `${FENIX_DATA_FILE}.tmp-${process.pid}-${Date.now()}`;
-  const json = JSON.stringify(nextData, null, 2);
+  const json = JSON.stringify(nextData);
 
   JSON.parse(json);
 
   fs.writeFileSync(tempFile, json, 'utf8');
-  JSON.parse(fs.readFileSync(tempFile, 'utf8'));
-
   fs.renameSync(tempFile, FENIX_DATA_FILE);
 
-  FENIX_DATA_MEMORY_CACHE = normalizeFenixDataShape(nextData);
+  FENIX_DATA_MEMORY_CACHE = nextData;
 }
 /* FIM_FENIX_DATA_PROTECTION_20260612 */
 
@@ -6114,6 +6112,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
