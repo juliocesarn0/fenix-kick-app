@@ -6094,7 +6094,7 @@ function fenixCycleDate132(cycle) {
 
 app.post('/api/fenix/admin/maintenance/cleanup-cycles', requireFenixAdmin, (req, res) => {
   try {
-    const keepDays = Math.max(1, Math.min(60, Number(req.body?.keepDays || req.query?.keepDays || 7)));
+    const keepDays = Math.max(1, Math.min(60, Number(req.body?.keepDays || req.query?.keepDays || 1)));
     const dryRun = String(req.body?.dryRun ?? req.query?.dryRun ?? 'true').toLowerCase() !== 'false';
 
     if (!fs.existsSync(FENIX_DATA_FILE)) {
@@ -6175,7 +6175,7 @@ app.post('/api/fenix/admin/maintenance/cleanup-cycles', requireFenixAdmin, (req,
 });
 
 // FENIX_AUTO_CYCLES_CLEANUP_133
-const FENIX_AUTO_CYCLES_KEEP_DAYS_133 = Number(process.env.FENIX_AUTO_CYCLES_KEEP_DAYS || 3);
+const FENIX_AUTO_CYCLES_KEEP_DAYS_133 = Number(process.env.FENIX_AUTO_CYCLES_KEEP_DAYS || 1);
 const FENIX_AUTO_CYCLES_INTERVAL_MS_133 = 6 * 60 * 60 * 1000;
 let FENIX_AUTO_CYCLES_RUNNING_133 = false;
 
@@ -6257,6 +6257,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
