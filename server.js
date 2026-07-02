@@ -607,6 +607,103 @@ function readFenixData() {
   }
 }
 
+// FENIX_DATA_DEBOUNCED_WRITE_129
+const FENIX_DATA_WRITE_DEBOUNCE_MS = Number(process.env.FENIX_DATA_WRITE_DEBOUNCE_MS || 5000);
+let FENIX_DATA_PENDING_WRITE_JSON_129 = null;
+let FENIX_DATA_PENDING_WRITE_REASON_129 = '';
+let FENIX_DATA_WRITE_TIMER_129 = null;
+let FENIX_DATA_LAST_WRITE_STARTED_AT_129 = 0;
+let FENIX_DATA_LAST_WRITE_FINISHED_AT_129 = 0;
+
+function fenixWriteJsonToDiskSync129(json) {
+  fs.mkdirSync(FENIX_DATA_DIR, { recursive: true });
+
+  const tempFile = `${FENIX_DATA_FILE}.tmp-${process.pid}-${Date.now()}`;
+
+  fs.writeFileSync(tempFile, json, 'utf8');
+  fs.renameSync(tempFile, FENIX_DATA_FILE);
+}
+
+function flushFenixDataWriteQueue129(reason = 'manual') {
+  if (FENIX_DATA_WRITE_TIMER_129) {
+    clearTimeout(FENIX_DATA_WRITE_TIMER_129);
+    FENIX_DATA_WRITE_TIMER_129 = null;
+  }
+
+  const json = FENIX_DATA_PENDING_WRITE_JSON_129;
+
+  if (!json) {
+    return false;
+  }
+
+  FENIX_DATA_PENDING_WRITE_JSON_129 = null;
+
+  try {
+    FENIX_DATA_LAST_WRITE_STARTED_AT_129 = Date.now();
+
+    JSON.parse(json);
+    fenixWriteJsonToDiskSync129(json);
+
+    FENIX_DATA_LAST_WRITE_FINISHED_AT_129 = Date.now();
+    return true;
+  } catch (error) {
+    FENIX_DATA_PENDING_WRITE_JSON_129 = json;
+
+    console.error('Erro salvando fenix-data.json na fila:', {
+      reason,
+      pendingReason: FENIX_DATA_PENDING_WRITE_REASON_129,
+      message: error?.message || String(error)
+    });
+
+    if (!FENIX_DATA_WRITE_TIMER_129) {
+      FENIX_DATA_WRITE_TIMER_129 = setTimeout(() => {
+        flushFenixDataWriteQueue129('retry');
+      }, Math.max(1000, FENIX_DATA_WRITE_DEBOUNCE_MS));
+
+      if (typeof FENIX_DATA_WRITE_TIMER_129.unref === 'function') {
+        FENIX_DATA_WRITE_TIMER_129.unref();
+      }
+    }
+
+    return false;
+  }
+}
+
+function scheduleFenixDataWrite129(json, reason = 'normal', immediate = false) {
+  FENIX_DATA_PENDING_WRITE_JSON_129 = json;
+  FENIX_DATA_PENDING_WRITE_REASON_129 = reason;
+
+  if (immediate || FENIX_DATA_WRITE_DEBOUNCE_MS <= 0) {
+    return flushFenixDataWriteQueue129(reason);
+  }
+
+  if (FENIX_DATA_WRITE_TIMER_129) {
+    clearTimeout(FENIX_DATA_WRITE_TIMER_129);
+  }
+
+  FENIX_DATA_WRITE_TIMER_129 = setTimeout(() => {
+    flushFenixDataWriteQueue129('debounce');
+  }, FENIX_DATA_WRITE_DEBOUNCE_MS);
+
+  if (typeof FENIX_DATA_WRITE_TIMER_129.unref === 'function') {
+    FENIX_DATA_WRITE_TIMER_129.unref();
+  }
+
+  return false;
+}
+
+process.on('beforeExit', () => {
+  try {
+    flushFenixDataWriteQueue129('beforeExit');
+  } catch {}
+});
+
+process.on('exit', () => {
+  try {
+    flushFenixDataWriteQueue129('exit');
+  } catch {}
+});
+
 function writeFenixData(data) {
   const nextData = normalizeFenixDataShape(data);
   const allowDangerousShrink = nextData.__allowDangerousShrink === true;
@@ -626,6 +723,7 @@ function writeFenixData(data) {
     const nextSchedule = Array.isArray(nextData.schedule) ? nextData.schedule.length : 0;
 
     if (currentUsers > 0 && nextUsers < currentUsers) {
+      flushFenixDataWriteQueue129('before-blocked-users-shrink-backup');
       createFenixDataBackup('blocked-users-shrink', true);
 
       throw new Error(
@@ -634,6 +732,7 @@ function writeFenixData(data) {
     }
 
     if (currentSchedule > 0 && nextSchedule === 0) {
+      flushFenixDataWriteQueue129('before-blocked-schedule-empty-backup');
       createFenixDataBackup('blocked-schedule-empty', true);
 
       throw new Error(
@@ -642,30 +741,36 @@ function writeFenixData(data) {
     }
   }
 
+  const currentUsersCount = currentData && Array.isArray(currentData.users) ? currentData.users.length : 0;
+  const currentScheduleCount = currentData && Array.isArray(currentData.schedule) ? currentData.schedule.length : 0;
+  const currentCyclesCount = currentData && Array.isArray(currentData.cycles) ? currentData.cycles.length : 0;
+
   const forceBackup =
     currentData &&
     (
-      nextData.users.length !== currentData.users.length ||
-      nextData.schedule.length !== currentData.schedule.length ||
-      nextData.cycles.length < currentData.cycles.length
+      nextData.users.length !== currentUsersCount ||
+      nextData.schedule.length !== currentScheduleCount ||
+      nextData.cycles.length < currentCyclesCount
     );
 
-  // FENIX_FAST_WRITE_BACKUP_ONLY_WHEN_FORCED_114
   if (forceBackup) {
+    flushFenixDataWriteQueue129('before-forced-backup');
     createFenixDataBackup('before-write', true);
   }
 
-  fs.mkdirSync(FENIX_DATA_DIR, { recursive: true });
-
-  const tempFile = `${FENIX_DATA_FILE}.tmp-${process.pid}-${Date.now()}`;
   const json = JSON.stringify(nextData);
 
   JSON.parse(json);
 
-  fs.writeFileSync(tempFile, json, 'utf8');
-  fs.renameSync(tempFile, FENIX_DATA_FILE);
-
   FENIX_DATA_MEMORY_CACHE = nextData;
+
+  const immediateWrite = Boolean(forceBackup || allowDangerousShrink);
+
+  scheduleFenixDataWrite129(
+    json,
+    immediateWrite ? 'immediate-critical' : 'debounced-normal',
+    immediateWrite
+  );
 }
 /* FIM_FENIX_DATA_PROTECTION_20260612 */
 
@@ -6136,6 +6241,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
