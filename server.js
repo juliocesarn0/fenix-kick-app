@@ -18,6 +18,7 @@ const APP_URL = (process.env.APP_URL || `http://localhost:${PORT}`).replace(/\/$
 const KICK_CLIENT_ID = process.env.KICK_CLIENT_ID || '';
 const KICK_CLIENT_SECRET = process.env.KICK_CLIENT_SECRET || '';
 const KICK_REDIRECT_URI = process.env.KICK_REDIRECT_URI || `${APP_URL}/auth/kick/callback`;
+const KICK_GRADE_REDIRECT_URI = process.env.KICK_GRADE_REDIRECT_URI || `${APP_URL}/fenix/grade/kick-callback`;
 const KICK_SCOPES = process.env.KICK_SCOPES || 'user:read channel:read';
 const FENIX_SESSION_DIR = process.env.FENIX_SESSION_DIR ||
   (fs.existsSync('/data') ? '/data/sessions' : path.join(__dirname, 'railway-data', 'sessions'));
@@ -5822,10 +5823,283 @@ function fenixAutoCleanupCycles133(source = 'auto') {
 
 setTimeout(() => fenixAutoCleanupCycles133('startup'), 2 * 60 * 1000);
 setInterval(() => fenixAutoCleanupCycles133('interval'), FENIX_AUTO_CYCLES_INTERVAL_MS_133);
+// FENIX_PUBLIC_GRADE_PAGE_KICK_LOGIN_FINAL
+const FENIX_GRADE_OAUTH_STATES = new Map();
+
+function fenixGradeDayLabelFromDate143(dateKey) {
+  const labels = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+  const day = fenixWeeklyDayOfWeekFinal(dateKey);
+  return labels[day] || dateKey;
+}
+
+app.get('/fenix/grade', (req, res) => {
+  if (req.session?.fenixGradeUser) {
+    return fenixRenderGradePage(req, res);
+  }
+
+  const erro = req.query?.erro || '';
+
+  const mensagens = {
+    naoVinculado: 'Essa conta Kick nao esta vinculada a nenhuma conta Fenix. Baixe o app e vincule sua Kick primeiro.',
+    estadoInvalido: 'Sessao de login expirada. Tente novamente.',
+    erroKick: 'Erro ao conectar com a Kick. Tente novamente.'
+  };
+
+  res.type('html').send(`
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fenix Lurk - Grade</title>
+<style>
+  body{margin:0;background:#05070d;color:#fff;font-family:Arial,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh}
+  .box{background:#0a0f19;border:1px solid rgba(0,255,106,.25);border-radius:16px;padding:28px;width:100%;max-width:360px;text-align:center}
+  h1{color:#00ff6a;margin:0 0 6px;font-size:22px}
+  .muted{color:#9ba8ba;font-size:13px;margin-bottom:22px}
+  a.kickBtn{display:block;border:1px solid rgba(0,255,106,.65);border-radius:10px;background:rgba(0,255,106,.14);color:#fff;padding:13px;text-decoration:none;font-weight:900}
+  a.kickBtn:hover{background:rgba(0,255,106,.25)}
+  .erro{color:#ff5252;font-weight:800;margin-bottom:16px;font-size:13px}
+</style>
+</head>
+<body>
+  <div class="box">
+    <h1>Fenix Lurk</h1>
+    <div class="muted">Entre com sua conta Kick para ver a grade da semana.</div>
+    ${erro && mensagens[erro] ? '<div class="erro">' + fenixHtmlEscape(mensagens[erro]) + '</div>' : ''}
+    <a class="kickBtn" href="/fenix/grade/kick-login">Entrar com Kick</a>
+  </div>
+</body>
+</html>
+  `);
+});
+
+app.get('/fenix/grade/kick-login', requireKickConfig, (req, res) => {
+  const state = crypto.randomUUID();
+
+  FENIX_GRADE_OAUTH_STATES.set(state, { createdAt: Date.now() });
+
+  for (const [key, value] of FENIX_GRADE_OAUTH_STATES.entries()) {
+    if (Date.now() - value.createdAt > 10 * 60 * 1000) {
+      FENIX_GRADE_OAUTH_STATES.delete(key);
+    }
+  }
+
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: KICK_CLIENT_ID,
+    redirect_uri: KICK_GRADE_REDIRECT_URI,
+    scope: 'user:read',
+    state
+  });
+
+  res.redirect('https://id.kick.com/oauth/authorize?' + params.toString());
+});
+
+app.get('/fenix/grade/kick-callback', requireKickConfig, async (req, res) => {
+  const code = String(req.query?.code || '').trim();
+  const state = String(req.query?.state || '').trim();
+
+  if (!code || !state || !FENIX_GRADE_OAUTH_STATES.has(state)) {
+    return res.redirect('/fenix/grade?erro=estadoInvalido');
+  }
+
+  FENIX_GRADE_OAUTH_STATES.delete(state);
+
+  try {
+    const tokenRes = await fetch('https://id.kick.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: KICK_CLIENT_ID,
+        client_secret: KICK_CLIENT_SECRET,
+        redirect_uri: KICK_GRADE_REDIRECT_URI,
+        code
+      })
+    });
+
+    const tokenData = await tokenRes.json().catch(() => ({}));
+
+    if (!tokenRes.ok || !tokenData.access_token) {
+      return res.redirect('/fenix/grade?erro=erroKick');
+    }
+
+    const userRes = await fetch('https://api.kick.com/public/v1/users', {
+      headers: { Authorization: 'Bearer ' + tokenData.access_token }
+    });
+
+    const kickUserData = await userRes.json().catch(() => ({}));
+
+    if (!userRes.ok) {
+      return res.redirect('/fenix/grade?erro=erroKick');
+    }
+
+    const kickUser = safeKickUserPayload(kickUserData);
+    const kickId = String(kickUser.id || '').trim();
+    const kickName = String(kickUser.username || kickUser.slug || '').trim().toLowerCase();
+
+    const data = readFenixData();
+
+    const fenixUser = data.users.find((item) => {
+      const itemKickId = String(item.kickUserId || item.kickId || '').trim();
+      const itemKickName = String(item.kickUsername || item.kickName || '').trim().toLowerCase();
+
+      return (kickId && itemKickId === kickId) || (kickName && itemKickName === kickName);
+    });
+
+    if (!fenixUser || fenixUser.blocked || fenixUser.deleted) {
+      return res.redirect('/fenix/grade?erro=naoVinculado');
+    }
+
+    req.session.fenixGradeUser = fenixUser.username;
+    res.redirect('/fenix/grade');
+  } catch (error) {
+    console.error('Erro no login Kick da grade:', error);
+    res.redirect('/fenix/grade?erro=erroKick');
+  }
+});
+
+app.post('/fenix/grade/logout', (req, res) => {
+  if (req.session) req.session.fenixGradeUser = null;
+  res.redirect('/fenix/grade');
+});
+
+function fenixRenderGradePage(req, res) {
+  const data = readFenixData();
+  const weeklyInfo = fenixWeeklyInfoFinal();
+
+  data.schedule = Array.isArray(data.schedule) ? data.schedule : [];
+
+  const weekSlots = data.schedule.filter((slot) => {
+    return slot && slot.slotDate >= weeklyInfo.weekStart && slot.slotDate <= weeklyInfo.weekEnd;
+  });
+
+  const byDate = {};
+
+  for (const slot of weekSlots) {
+    if (!byDate[slot.slotDate]) byDate[slot.slotDate] = {};
+    byDate[slot.slotDate][slot.slotHour] = slot;
+  }
+
+  const days = [];
+  for (let i = 0; i < 7; i += 1) {
+    const dateKey = fenixWeeklyAddDaysFinal(weeklyInfo.weekStart, i);
+    days.push({ date: dateKey, label: fenixGradeDayLabelFromDate143(dateKey) });
+  }
+
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0') + ':00');
+
+  function cellHtml(slot, screenNum) {
+    if (!slot) return '<span class="vazio">-</span>';
+    const name = slot['screen' + screenNum + 'Name'] || '';
+    const maintenance = Boolean(slot['screen' + screenNum + 'Maintenance']);
+    if (!name || maintenance) return '<span class="vazio">-</span>';
+    return '<b>' + fenixHtmlEscape(name) + '</b>';
+  }
+
+  const tables = days.map((day) => {
+    const rows = hours.map((hour) => {
+      const slot = (byDate[day.date] || {})[hour];
+      const names = [1, 2, 3].map((n) => {
+        return slot ? String(slot['screen' + n + 'Name'] || '').toLowerCase() : '';
+      });
+
+      return '<tr class="fenixGradeRow" data-names="' + fenixHtmlEscape(names.join('|')) + '">' +
+        '<td><b>' + hour + '</b></td>' +
+        '<td>' + cellHtml(slot, 1) + '</td>' +
+        '<td>' + cellHtml(slot, 2) + '</td>' +
+        '<td>' + cellHtml(slot, 3) + '</td>' +
+      '</tr>';
+    }).join('');
+
+    return '<div class="fenixGradeDay" data-day="' + day.date + '">' +
+      '<h2>' + day.label + ' <span class="muted">(' + day.date + ')</span></h2>' +
+      '<table><thead><tr><th>Hora</th><th>Tela 1</th><th>Tela 2</th><th>Tela 3</th></tr></thead><tbody>' +
+        rows +
+      '</tbody></table>' +
+    '</div>';
+  }).join('');
+
+  res.type('html').send(`
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fenix Lurk - Grade da semana</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#05070d;color:#fff;font-family:Arial,sans-serif}
+  header{padding:16px 20px;border-bottom:1px solid rgba(0,255,106,.25);background:#07110c;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+  h1{margin:0;color:#00ff6a;font-size:20px}
+  .muted{color:#9ba8ba;font-size:12px}
+  main{padding:16px;max-width:1200px;margin:0 auto}
+  .searchBox{margin-bottom:18px}
+  .searchBox input{width:100%;box-sizing:border-box;border:1px solid rgba(245,178,42,.55);border-radius:10px;background:#080b12;color:#fff;padding:12px 14px;font-weight:800;font-size:15px}
+  .fenixGradeDay{border:1px solid rgba(255,255,255,.09);border-radius:14px;padding:14px;margin-bottom:16px;background:rgba(255,255,255,.02)}
+  .fenixGradeDay h2{color:#f5b22a;font-size:16px;margin:0 0 10px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:7px 6px;border-bottom:1px solid rgba(255,255,255,.07);text-align:left}
+  th{color:#00ff6a}
+  .vazio{color:#5a6577}
+  form.logout{margin:0}
+  button.logoutBtn{border:1px solid rgba(255,82,82,.5);background:rgba(255,82,82,.12);color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:800;font-size:12px}
+</style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Grade Fenix Lurk</h1>
+      <div class="muted">Semana ${weeklyInfo.weekStart} a ${weeklyInfo.weekEnd} · Logado como ${fenixHtmlEscape(req.session.fenixGradeUser)}</div>
+    </div>
+    <form class="logout" method="POST" action="/fenix/grade/logout">
+      <button class="logoutBtn" type="submit">Sair</button>
+    </form>
+  </header>
+
+  <main>
+    <div class="searchBox">
+      <input id="fenixGradeSearch" placeholder="Digite seu nick da Kick para achar seus horarios..." autocomplete="off" />
+    </div>
+
+    ${tables}
+  </main>
+
+<script>
+  const input = document.getElementById('fenixGradeSearch');
+
+  function norm(v){ return String(v || '').trim().toLowerCase(); }
+
+  function applyFilter(){
+    const query = norm(input.value);
+    const rows = document.querySelectorAll('.fenixGradeRow');
+    const days = document.querySelectorAll('.fenixGradeDay');
+
+    rows.forEach(function(row){
+      const names = String(row.getAttribute('data-names') || '');
+      const show = !query || names.includes(query);
+      row.style.display = show ? '' : 'none';
+    });
+
+    days.forEach(function(day){
+      const visibleRows = day.querySelectorAll('.fenixGradeRow:not([style*="display: none"])');
+      day.style.display = (!query || visibleRows.length) ? '' : 'none';
+    });
+  }
+
+  input.addEventListener('input', applyFilter);
+</script>
+</body>
+</html>
+  `);
+}
+
 app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
