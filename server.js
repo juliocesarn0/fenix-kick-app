@@ -2046,8 +2046,25 @@ app.post('/api/fenix/app/heartbeat', fenixHeartbeatRateLimitFinal, (req, res) =>
   });
 });
 
+// FENIX_ADMIN_ONLINE_USERS_CACHE_128
+const FENIX_ADMIN_ONLINE_USERS_CACHE_MS = Number(process.env.FENIX_ADMIN_ONLINE_USERS_CACHE_MS || 10000);
+let FENIX_ADMIN_ONLINE_USERS_CACHE_128 = null;
+
 // FENIX_ADMIN_ONLINE_USERS_FAST_HEARTBEAT_FINAL
 app.get('/api/fenix/admin/online-users', requireFenixAdmin, fenixAdminReadRateLimitFinal, (req, res) => {
+  const nowCache128 = Date.now();
+
+  if (
+    FENIX_ADMIN_ONLINE_USERS_CACHE_128 &&
+    nowCache128 - FENIX_ADMIN_ONLINE_USERS_CACHE_128.createdAt < FENIX_ADMIN_ONLINE_USERS_CACHE_MS
+  ) {
+    return res.json({
+      ...FENIX_ADMIN_ONLINE_USERS_CACHE_128.payload,
+      cached: true,
+      cacheAgeMs: nowCache128 - FENIX_ADMIN_ONLINE_USERS_CACHE_128.createdAt
+    });
+  }
+
   const data = readFenixData();
 
   data.users = Array.isArray(data.users) ? data.users : [];
@@ -2250,12 +2267,19 @@ app.get('/api/fenix/admin/online-users', requireFenixAdmin, fenixAdminReadRateLi
     };
   });
 
-  return res.json({
+  const payload = {
     ok: true,
+    cached: false,
     users
-  });
-});
+  };
 
+  FENIX_ADMIN_ONLINE_USERS_CACHE_128 = {
+    createdAt: Date.now(),
+    payload
+  };
+
+  return res.json(payload);
+});
 app.post('/api/fenix/admin/user-points/reset', requireFenixAdmin, (req, res) => {
   const data = readFenixData();
 
@@ -6112,6 +6136,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
