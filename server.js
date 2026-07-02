@@ -5876,8 +5876,10 @@ app.get('/fenix/grade', (req, res) => {
 
 app.get('/fenix/grade/kick-login', requireKickConfig, (req, res) => {
   const state = crypto.randomUUID();
+  const codeVerifier = createKickCodeVerifier();
+  const codeChallenge = createKickCodeChallenge(codeVerifier);
 
-  FENIX_GRADE_OAUTH_STATES.set(state, { createdAt: Date.now() });
+  FENIX_GRADE_OAUTH_STATES.set(state, { createdAt: Date.now(), codeVerifier });
 
   for (const [key, value] of FENIX_GRADE_OAUTH_STATES.entries()) {
     if (Date.now() - value.createdAt > 10 * 60 * 1000) {
@@ -5890,10 +5892,11 @@ app.get('/fenix/grade/kick-login', requireKickConfig, (req, res) => {
     client_id: KICK_CLIENT_ID,
     redirect_uri: KICK_GRADE_REDIRECT_URI,
     scope: 'user:read',
-    state
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256'
   });
 
-  console.log('[FENIX_GRADE_DEBUG] URL Kick:', 'https://id.kick.com/oauth/authorize?' + params.toString());
   res.redirect('https://id.kick.com/oauth/authorize?' + params.toString());
 });
 
@@ -5905,6 +5908,7 @@ app.get('/fenix/grade/kick-callback', requireKickConfig, async (req, res) => {
     return res.redirect('/fenix/grade?erro=estadoInvalido');
   }
 
+  const oauthStateData = FENIX_GRADE_OAUTH_STATES.get(state);
   FENIX_GRADE_OAUTH_STATES.delete(state);
 
   try {
@@ -5916,7 +5920,8 @@ app.get('/fenix/grade/kick-callback', requireKickConfig, async (req, res) => {
         client_id: KICK_CLIENT_ID,
         client_secret: KICK_CLIENT_SECRET,
         redirect_uri: KICK_GRADE_REDIRECT_URI,
-        code
+        code,
+        code_verifier: oauthStateData?.codeVerifier || ''
       })
     });
 
