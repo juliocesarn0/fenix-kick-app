@@ -578,7 +578,7 @@ function fenixCloneData(data) {
 function readFenixData() {
   try {
     if (FENIX_DATA_MEMORY_CACHE) {
-      return fenixCloneData(FENIX_DATA_MEMORY_CACHE);
+      return FENIX_DATA_MEMORY_CACHE;
     }
 
     if (!fs.existsSync(FENIX_DATA_FILE)) {
@@ -587,12 +587,12 @@ function readFenixData() {
       fs.writeFileSync(FENIX_DATA_FILE, JSON.stringify(initial, null, 2), 'utf8');
       createFenixDataBackup('initial', true);
       FENIX_DATA_MEMORY_CACHE = normalizeFenixDataShape(initial);
-      return fenixCloneData(FENIX_DATA_MEMORY_CACHE);
+      return FENIX_DATA_MEMORY_CACHE;
     }
 
     const parsed = JSON.parse(fs.readFileSync(FENIX_DATA_FILE, 'utf8'));
     FENIX_DATA_MEMORY_CACHE = normalizeFenixDataShape(parsed);
-    return fenixCloneData(FENIX_DATA_MEMORY_CACHE);
+    return FENIX_DATA_MEMORY_CACHE;
   } catch (error) {
     console.error('Erro lendo fenix-data.json:', error);
 
@@ -600,7 +600,7 @@ function readFenixData() {
 
     if (backup) {
       FENIX_DATA_MEMORY_CACHE = normalizeFenixDataShape(backup);
-      return fenixCloneData(FENIX_DATA_MEMORY_CACHE);
+      return FENIX_DATA_MEMORY_CACHE;
     }
 
     throw error;
@@ -609,7 +609,7 @@ function readFenixData() {
 
 // FENIX_DATA_DEBOUNCED_WRITE_129
 const FENIX_DATA_WRITE_DEBOUNCE_MS = Number(process.env.FENIX_DATA_WRITE_DEBOUNCE_MS || 5000);
-let FENIX_DATA_PENDING_WRITE_JSON_129 = null;
+let FENIX_DATA_PENDING_WRITE_DATA_129 = null;
 let FENIX_DATA_PENDING_WRITE_REASON_129 = '';
 let FENIX_DATA_WRITE_TIMER_129 = null;
 let FENIX_DATA_LAST_WRITE_STARTED_AT_129 = 0;
@@ -624,30 +624,36 @@ function fenixWriteJsonToDiskSync129(json) {
   fs.renameSync(tempFile, FENIX_DATA_FILE);
 }
 
+function fenixBuildDataJson129(data) {
+  const json = JSON.stringify(normalizeFenixDataShape(data));
+  JSON.parse(json);
+  return json;
+}
+
 function flushFenixDataWriteQueue129(reason = 'manual') {
   if (FENIX_DATA_WRITE_TIMER_129) {
     clearTimeout(FENIX_DATA_WRITE_TIMER_129);
     FENIX_DATA_WRITE_TIMER_129 = null;
   }
 
-  const json = FENIX_DATA_PENDING_WRITE_JSON_129;
+  const dataToWrite = FENIX_DATA_PENDING_WRITE_DATA_129 || FENIX_DATA_MEMORY_CACHE;
 
-  if (!json) {
+  if (!dataToWrite) {
     return false;
   }
 
-  FENIX_DATA_PENDING_WRITE_JSON_129 = null;
+  FENIX_DATA_PENDING_WRITE_DATA_129 = null;
 
   try {
     FENIX_DATA_LAST_WRITE_STARTED_AT_129 = Date.now();
 
-    JSON.parse(json);
+    const json = fenixBuildDataJson129(dataToWrite);
     fenixWriteJsonToDiskSync129(json);
 
     FENIX_DATA_LAST_WRITE_FINISHED_AT_129 = Date.now();
     return true;
   } catch (error) {
-    FENIX_DATA_PENDING_WRITE_JSON_129 = json;
+    FENIX_DATA_PENDING_WRITE_DATA_129 = dataToWrite;
 
     console.error('Erro salvando fenix-data.json na fila:', {
       reason,
@@ -669,8 +675,8 @@ function flushFenixDataWriteQueue129(reason = 'manual') {
   }
 }
 
-function scheduleFenixDataWrite129(json, reason = 'normal', immediate = false) {
-  FENIX_DATA_PENDING_WRITE_JSON_129 = json;
+function scheduleFenixDataWrite129(data, reason = 'normal', immediate = false) {
+  FENIX_DATA_PENDING_WRITE_DATA_129 = data;
   FENIX_DATA_PENDING_WRITE_REASON_129 = reason;
 
   if (immediate || FENIX_DATA_WRITE_DEBOUNCE_MS <= 0) {
@@ -758,16 +764,12 @@ function writeFenixData(data) {
     createFenixDataBackup('before-write', true);
   }
 
-  const json = JSON.stringify(nextData);
-
-  JSON.parse(json);
-
   FENIX_DATA_MEMORY_CACHE = nextData;
 
   const immediateWrite = Boolean(forceBackup || allowDangerousShrink);
 
   scheduleFenixDataWrite129(
-    json,
+    nextData,
     immediateWrite ? 'immediate-critical' : 'debounced-normal',
     immediateWrite
   );
@@ -6241,6 +6243,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
