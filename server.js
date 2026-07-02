@@ -1895,7 +1895,33 @@ app.post('/api/fenix/app/complete-cycle', fenixCycleRateLimitFinal, (req, res) =
     });
   }
 
-  const alreadyPaid = data.cycles.find((item) => item.userId === user.id && item.cycleKey === cycleKey);
+  // FENIX_COMPLETE_CYCLE_FAST_LOOKUP_140
+  let alreadyPaid = null;
+  let lastCycleForUser = null;
+  const userIdText140 = String(user.id || '');
+
+  for (let i = data.cycles.length - 1; i >= 0; i -= 1) {
+    const item = data.cycles[i];
+
+    if (!alreadyPaid && item.userId === user.id && item.cycleKey === cycleKey) {
+      alreadyPaid = item;
+    }
+
+    if (!lastCycleForUser && String(item.userId || '') === userIdText140) {
+      const time = item.createdAt ? new Date(item.createdAt).getTime() : 0;
+
+      if (Number.isFinite(time) && time > 0) {
+        lastCycleForUser = {
+          createdAt: item.createdAt,
+          time
+        };
+      }
+    }
+
+    if (alreadyPaid && lastCycleForUser) {
+      break;
+    }
+  }
 
   if (alreadyPaid) {
     if (weeklyControl.changed) writeFenixData(data);
@@ -1908,17 +1934,6 @@ app.post('/api/fenix/app/complete-cycle', fenixCycleRateLimitFinal, (req, res) =
       user: publicFenixUser(user, weeklyControl.info)
     });
   }
-
-  const lastCycleForUser = data.cycles
-    .filter((cycle) => String(cycle.userId || '') === String(user.id))
-    .map((cycle) => {
-      return {
-        createdAt: cycle.createdAt,
-        time: cycle.createdAt ? new Date(cycle.createdAt).getTime() : 0
-      };
-    })
-    .filter((cycle) => Number.isFinite(cycle.time) && cycle.time > 0)
-    .sort((a, b) => b.time - a.time)[0] || null;
 
   if (lastCycleForUser) {
     const elapsedMs = Date.now() - lastCycleForUser.time;
@@ -6257,6 +6272,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
