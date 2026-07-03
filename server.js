@@ -5965,7 +5965,7 @@ function fenixGradeDayLabelFromDate143(dateKey) {
 }
 
 app.get('/fenix/grade', (req, res) => {
-  if (req.session?.fenixGradeUser) {
+  if (req.session?.fenixGradeUser && req.session?.fenixGradeUserId) {
     return fenixRenderGradePage(req, res);
   }
 
@@ -6420,7 +6420,7 @@ app.get('/fenix/grade/raffle/run-now', (req, res, next) => { req.headers['x-feni
 
 // FENIX_GRADE_RAFFLE_JOIN_ROUTE_FINAL
 app.post('/fenix/grade/raffle/join', express.json(), (req, res) => {
-  if (!req.session || !req.session.fenixGradeUser) {
+  if (!req.session || !req.session.fenixGradeUser || !req.session.fenixGradeUserId) {
     return res.status(401).json({ ok: false, message: 'Faca login com a Kick primeiro.' });
   }
 
