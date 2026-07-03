@@ -6114,6 +6114,7 @@ function fenixRenderGradePage(req, res) {
   const nextRaffleSlot = fenixFindNextRaffleSlot143(data.schedule, civilWeekStart, civilWeekEnd);
   const raffleData = fenixReadGradeRaffleFinal();
   const raffleSlots = (raffleData.weekStart === civilWeekStart && raffleData.slots) ? raffleData.slots : {};
+  const raffleResolved = (raffleData.weekStart === civilWeekStart && raffleData.resolved) ? raffleData.resolved : {};
   const currentGradeUser = String(req.session.fenixGradeUser || '');
   const nowMsGrade = Date.now();
   const weekSlots = data.schedule.filter((slot) => {
@@ -6135,17 +6136,27 @@ function fenixRenderGradePage(req, res) {
 
   const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0') + ':00');
 
-  function cellHtml(slot, screenNum) {
+  function cellHtml(slot, screenNum, dayDate, hourKey) {
     if (!slot) return '<span class="vazio">-</span>';
     const name = slot['screen' + screenNum + 'Name'] || '';
     const maintenance = Boolean(slot['screen' + screenNum + 'Maintenance']);
     if (!name || maintenance) return '<span class="vazio">-</span>';
+
+    const slotKey = dayDate + '_' + hourKey;
+    const resolvedInfo = raffleResolved[slotKey];
+    let wonByRaffle = false;
+    if (resolvedInfo && Array.isArray(resolvedInfo.winners)) {
+      wonByRaffle = resolvedInfo.winners.some((w) => Number(w.screen) === Number(screenNum) && String(w.winner).toLowerCase() === String(name).toLowerCase());
+    }
+
+    if (wonByRaffle) {
+      return '<b class="raffleWinner">' + fenixHtmlEscape(name) + ' <span title="Ganhou no sorteio">&#127881;</span></b>';
+    }
     return '<b>' + fenixHtmlEscape(name) + '</b>';
   }
 
   const tables = days.map((day) => {
   function raffleCellHtml143(day, hour, slot) {
-    return '<span class="vazio">-</span>'; // FENIX_RAFFLE_DISABLED_UNTIL_ETAPA2 - remover esta linha para reativar
     const isVacant = fenixSlotIsVacant143(slot);
     if (!isVacant) return '<span class="vazio">-</span>';
 
@@ -6182,9 +6193,9 @@ function fenixRenderGradePage(req, res) {
 
       return '<tr class="fenixGradeRow" data-names="' + fenixHtmlEscape(names.join('|')) + '">' +
         '<td><b>' + hour + '</b></td>' +
-        '<td>' + cellHtml(slot, 1) + '</td>' +
-        '<td>' + cellHtml(slot, 2) + '</td>' +
-        '<td>' + cellHtml(slot, 3) + '</td>' +
+        '<td>' + cellHtml(slot, 1, day.date, hour) + '</td>' +
+        '<td>' + cellHtml(slot, 2, day.date, hour) + '</td>' +
+        '<td>' + cellHtml(slot, 3, day.date, hour) + '</td>' +
         '<td>' + raffleCellHtml143(day.date, hour, slot) + '</td>' +
       '</tr>';
     }).join('');
@@ -6226,6 +6237,7 @@ function fenixRenderGradePage(req, res) {
   .raffleBtn:disabled{opacity:.5;cursor:default}
   .raffleJoined{color:#00ff6a;font-weight:800;font-size:11px}
   .raffleClosed{color:#f5b22a;font-weight:800;font-size:11px}
+  .raffleWinner{color:#f5b22a}
 </style>
 </head>
 <body>
@@ -6390,32 +6402,6 @@ function fenixProcessRaffles143() {
   return { processed, filled };
 }
 
-// FENIX_GRADE_RAFFLE_TEST_JOIN_TEMP
-app.get('/fenix/grade/raffle/test-join', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
-  const date = String(req.query?.date || '').trim();
-  const hour = String(req.query?.hour || '').trim();
-  const nick = String(req.query?.nick || '').trim();
-  if (!date || !hour || !nick) {
-    return res.status(400).json({ ok: false, message: 'Faltou date, hour ou nick.' });
-  }
-  const civilMonday = fenixMondayOfWeekFinal(new Date());
-  const civilWeekStart = fenixDateOnlyFinal(civilMonday);
-  const raffle = fenixReadGradeRaffleFinal();
-  if (raffle.weekStart !== civilWeekStart) {
-    raffle.weekStart = civilWeekStart;
-    raffle.slots = {};
-    raffle.wins = {};
-    raffle.resolved = {};
-  }
-  const slotKey = date + '_' + hour;
-  const list = Array.isArray(raffle.slots[slotKey]) ? raffle.slots[slotKey] : [];
-  if (!list.some((u) => String(u).toLowerCase() === nick.toLowerCase())) list.push(nick);
-  raffle.slots[slotKey] = list;
-  if (raffle.resolved && raffle.resolved[slotKey]) delete raffle.resolved[slotKey];
-  fenixSaveGradeRaffleFinal(raffle);
-  res.json({ ok: true, slotKey, participants: list });
-});
-
 // FENIX_GRADE_RAFFLE_RUN_NOW_ROUTE_FINAL
 app.get('/fenix/grade/raffle/run-now', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
   try {
@@ -6485,6 +6471,23 @@ app.post('/fenix/grade/raffle/join', express.json(), (req, res) => {
 
   return res.json({ ok: true, joined: true, participants: list.length });
 });
+
+// FENIX_GRADE_RAFFLE_AUTO_TIMER_FINAL
+let FENIX_RAFFLE_AUTO_RUNNING_143 = false;
+setInterval(() => {
+  if (FENIX_RAFFLE_AUTO_RUNNING_143) return;
+  FENIX_RAFFLE_AUTO_RUNNING_143 = true;
+  try {
+    const result = fenixProcessRaffles143();
+    if (result && result.filled > 0) {
+      console.log('[FENIX_RAFFLE_AUTO] Sorteados:', result.filled, 'em', result.processed, 'horarios');
+    }
+  } catch (error) {
+    console.error('[FENIX_RAFFLE_AUTO] Erro:', error);
+  } finally {
+    FENIX_RAFFLE_AUTO_RUNNING_143 = false;
+  }
+}, 60 * 1000);
 
 app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
