@@ -5826,6 +5826,87 @@ setInterval(() => fenixAutoCleanupCycles133('interval'), FENIX_AUTO_CYCLES_INTER
 // FENIX_PUBLIC_GRADE_PAGE_KICK_LOGIN_FINAL
 const FENIX_GRADE_OAUTH_STATES = new Map();
 
+
+// FENIX_GRADE_SLOT_RAFFLE_HELPERS_FINAL
+function fenixGradeRaffleFileFinal() {
+  return fenixFormApplicantsBaseDirFinal() + '/fenix-grade-slot-raffle.json';
+}
+
+function fenixReadGradeRaffleFinal() {
+  const file = fenixGradeRaffleFileFinal();
+  if (!fs.existsSync(file)) return { weekStart: '', slots: {}, wins: {} };
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return {
+      weekStart: String(parsed.weekStart || ''),
+      slots: parsed.slots && typeof parsed.slots === 'object' ? parsed.slots : {},
+      wins: parsed.wins && typeof parsed.wins === 'object' ? parsed.wins : {}
+    };
+  } catch (e) {
+    return { weekStart: '', slots: {}, wins: {} };
+  }
+}
+
+function fenixSaveGradeRaffleFinal(dataObj) {
+  const dir = fenixFormApplicantsBaseDirFinal();
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const file = fenixGradeRaffleFileFinal();
+  const tmp = file + '.tmp-' + process.pid + '-' + Date.now();
+  fs.writeFileSync(tmp, JSON.stringify(dataObj, null, 2), 'utf8');
+  fs.renameSync(tmp, file);
+}
+
+function fenixSlotDateTimeFinal(dateKey, hourKey) {
+  const parts = String(dateKey || '').split('-').map(Number);
+  const hour = Number(String(hourKey || '00:00').split(':')[0]);
+  if (parts.length !== 3) return 0;
+  return new Date(parts[0], parts[1] - 1, parts[2], hour, 0, 0).getTime();
+}
+
+const FENIX_GRADE_RAFFLE_CUTOFF_MS_143 = 15 * 60 * 1000;
+
+function fenixSlotIsVacant143(slot) {
+  if (!slot) return true;
+  for (let screen = 1; screen <= 3; screen += 1) {
+    const name = slot['screen' + screen + 'Name'] || '';
+    const maintenance = Boolean(slot['screen' + screen + 'Maintenance']);
+    if (!name && !maintenance) return true;
+  }
+  return false;
+}
+
+function fenixFindNextRaffleSlot143(schedule, civilWeekStart, civilWeekEnd) {
+  const now = Date.now();
+  let best = null;
+  let bestTime = Infinity;
+
+  for (const slot of (Array.isArray(schedule) ? schedule : [])) {
+    if (!slot || slot.slotDate < civilWeekStart || slot.slotDate > civilWeekEnd) continue;
+    if (!fenixSlotIsVacant143(slot)) continue;
+
+    const slotTime = fenixSlotDateTimeFinal(slot.slotDate, slot.slotHour);
+    if (slotTime <= 0) continue;
+    if (slotTime <= now) continue;
+
+    if (slotTime < bestTime) {
+      bestTime = slotTime;
+      best = { date: slot.slotDate, hour: slot.slotHour, slotTime };
+    }
+  }
+
+  return best;
+}
+
+function fenixUserAlreadyInSlot143(schedule, dateKey, hourKey, username) {
+  const slot = (Array.isArray(schedule) ? schedule.find((s) => s.slotDate === dateKey && s.slotHour === hourKey) : null);
+  if (!slot) return false;
+  const target = String(username || '').toLowerCase();
+  for (let screen = 1; screen <= 3; screen += 1) {
+    const name = String(slot['screen' + screen + 'Name'] || '').toLowerCase();
+    if (name && name === target) return true;
+  }
+  return false;
+}
 function fenixGradeDayLabelFromDate143(dateKey) {
   const labels = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
   const day = fenixWeeklyDayOfWeekFinal(dateKey);
@@ -5980,6 +6061,11 @@ function fenixRenderGradePage(req, res) {
 
   data.schedule = Array.isArray(data.schedule) ? data.schedule : [];
 
+  const nextRaffleSlot = fenixFindNextRaffleSlot143(data.schedule, civilWeekStart, civilWeekEnd);
+  const raffleData = fenixReadGradeRaffleFinal();
+  const raffleSlots = (raffleData.weekStart === civilWeekStart && raffleData.slots) ? raffleData.slots : {};
+  const currentGradeUser = String(req.session.fenixGradeUser || '');
+  const nowMsGrade = Date.now();
   const weekSlots = data.schedule.filter((slot) => {
     return slot && slot.slotDate >= civilWeekStart && slot.slotDate <= civilWeekEnd;
   });
@@ -6008,6 +6094,32 @@ function fenixRenderGradePage(req, res) {
   }
 
   const tables = days.map((day) => {
+  function raffleCellHtml143(day, hour, slot) {
+    const isVacant = fenixSlotIsVacant143(slot);
+    if (!isVacant) return '<span class="vazio">-</span>';
+
+    const isNext = nextRaffleSlot && nextRaffleSlot.date === day && nextRaffleSlot.hour === hour;
+    if (!isNext) return '<span class="vazio">Aguardando vez</span>';
+
+    const slotTime = fenixSlotDateTimeFinal(day, hour);
+    const closed = (slotTime - nowMsGrade) <= FENIX_GRADE_RAFFLE_CUTOFF_MS_143;
+    const slotKey = day + '_' + hour;
+    const participants = Array.isArray(raffleSlots[slotKey]) ? raffleSlots[slotKey] : [];
+    const alreadyJoined = participants.some((u) => String(u).toLowerCase() === currentGradeUser.toLowerCase());
+    const alreadyInSlot = fenixUserAlreadyInSlot143(data.schedule, day, hour, currentGradeUser);
+
+    if (closed) {
+      return '<span class="raffleClosed">Sorteio encerrado (' + participants.length + ')</span>';
+    }
+    if (alreadyInSlot) {
+      return '<span class="vazio">Voce ja esta nesse horario</span>';
+    }
+    if (alreadyJoined) {
+      return '<span class="raffleJoined">Participando (' + participants.length + ')</span>';
+    }
+    return '<button class="raffleBtn" data-date="' + day + '" data-hour="' + hour + '">Quero participar (' + participants.length + ')</button>';
+  }
+
     const rows = hours.map((hour) => {
       const slot = (byDate[day.date] || {})[hour];
       const names = [1, 2, 3].map((n) => {
@@ -6019,12 +6131,13 @@ function fenixRenderGradePage(req, res) {
         '<td>' + cellHtml(slot, 1) + '</td>' +
         '<td>' + cellHtml(slot, 2) + '</td>' +
         '<td>' + cellHtml(slot, 3) + '</td>' +
+        '<td>' + raffleCellHtml143(day.date, hour, slot) + '</td>' +
       '</tr>';
     }).join('');
 
     return '<div class="fenixGradeDay" data-day="' + day.date + '">' +
       '<h2>' + day.label + ' <span class="muted">(' + day.date + ')</span></h2>' +
-      '<table><thead><tr><th>Hora</th><th>Tela 1</th><th>Tela 2</th><th>Tela 3</th></tr></thead><tbody>' +
+      '<table><thead><tr><th>Hora</th><th>Tela 1</th><th>Tela 2</th><th>Tela 3</th><th>Sorteio</th></tr></thead><tbody>' +
         rows +
       '</tbody></table>' +
     '</div>';
@@ -6055,6 +6168,11 @@ function fenixRenderGradePage(req, res) {
   form.logout{margin:0}
   button.logoutBtn{border:1px solid rgba(255,82,82,.5);background:rgba(255,82,82,.12);color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:800;font-size:12px}
 </style>
+  .raffleBtn{border:1px solid rgba(0,255,106,.6);background:rgba(0,255,106,.14);color:#fff;padding:5px 9px;border-radius:8px;cursor:pointer;font-weight:800;font-size:11px}
+  .raffleBtn:hover{background:rgba(0,255,106,.28)}
+  .raffleBtn:disabled{opacity:.5;cursor:default}
+  .raffleJoined{color:#00ff6a;font-weight:800;font-size:11px}
+  .raffleClosed{color:#f5b22a;font-weight:800;font-size:11px}
 </head>
 <body>
   <header>
@@ -6099,10 +6217,101 @@ function fenixRenderGradePage(req, res) {
 
   input.addEventListener('input', applyFilter);
 </script>
+
+  document.addEventListener('click', function(ev){
+    const btn = ev.target && ev.target.closest ? ev.target.closest('.raffleBtn') : null;
+    if (!btn) return;
+
+    const date = btn.getAttribute('data-date');
+    const hour = btn.getAttribute('data-hour');
+
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+
+    fetch('/fenix/grade/raffle/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: date, hour: hour })
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (data.ok) {
+        location.reload();
+      } else {
+        alert(data.message || 'Nao foi possivel participar.');
+        btn.disabled = false;
+        location.reload();
+      }
+    })
+    .catch(function(){
+      alert('Erro de conexao. Tente de novo.');
+      btn.disabled = false;
+    });
+  });
+
+  if (document.querySelector('.raffleBtn') || document.querySelector('.raffleJoined')) {
+    setTimeout(function(){ location.reload(); }, 20000);
+  }
 </body>
 </html>
   `);
 }
+
+// FENIX_GRADE_RAFFLE_JOIN_ROUTE_FINAL
+app.post('/fenix/grade/raffle/join', express.json(), (req, res) => {
+  if (!req.session || !req.session.fenixGradeUser) {
+    return res.status(401).json({ ok: false, message: 'Faca login com a Kick primeiro.' });
+  }
+
+  const username = String(req.session.fenixGradeUser || '').trim();
+  const date = String(req.body && req.body.date || '').trim();
+  const hour = String(req.body && req.body.hour || '').trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:00$/.test(hour)) {
+    return res.status(400).json({ ok: false, message: 'Horario invalido.' });
+  }
+
+  const data = readFenixData();
+  const civilMonday = fenixMondayOfWeekFinal(new Date());
+  const civilWeekStart = fenixDateOnlyFinal(civilMonday);
+  const civilWeekEnd = fenixDateOnlyFinal(fenixAddDaysFinal(civilMonday, 6));
+
+  const nextSlot = fenixFindNextRaffleSlot143(data.schedule, civilWeekStart, civilWeekEnd);
+
+  if (!nextSlot || nextSlot.date !== date || nextSlot.hour !== hour) {
+    return res.status(403).json({ ok: false, message: 'Esse horario ainda nao esta liberado para o sorteio.' });
+  }
+
+  const now = Date.now();
+  if (nextSlot.slotTime - now <= FENIX_GRADE_RAFFLE_CUTOFF_MS_143) {
+    return res.status(403).json({ ok: false, message: 'As inscricoes para esse horario ja fecharam.' });
+  }
+
+  if (fenixUserAlreadyInSlot143(data.schedule, date, hour, username)) {
+    return res.status(403).json({ ok: false, message: 'Voce ja esta nesse horario. Nao pode participar do sorteio dele.' });
+  }
+
+  const raffle = fenixReadGradeRaffleFinal();
+
+  if (raffle.weekStart !== civilWeekStart) {
+    raffle.weekStart = civilWeekStart;
+    raffle.slots = {};
+    raffle.wins = {};
+  }
+
+  const slotKey = date + '_' + hour;
+  const list = Array.isArray(raffle.slots[slotKey]) ? raffle.slots[slotKey] : [];
+
+  if (list.some((u) => String(u).toLowerCase() === username.toLowerCase())) {
+    return res.json({ ok: true, already: true, message: 'Voce ja esta participando desse sorteio.' });
+  }
+
+  list.push(username);
+  raffle.slots[slotKey] = list;
+  fenixSaveGradeRaffleFinal(raffle);
+
+  return res.json({ ok: true, joined: true, participants: list.length });
+});
 
 app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
