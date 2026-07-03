@@ -6090,6 +6090,7 @@ app.get('/fenix/grade/kick-callback', requireKickConfig, async (req, res) => {
       return res.redirect('/fenix/grade?erro=naoVinculado');
     }
 
+    console.log('[FENIX_NICK_DEBUG] kickUsername:', JSON.stringify(fenixUser.kickUsername), '| kickName:', JSON.stringify(fenixUser.kickName), '| username:', JSON.stringify(fenixUser.username));
     req.session.fenixGradeUser = String(fenixUser.kickUsername || fenixUser.kickName || fenixUser.username || '').trim();
     res.redirect('/fenix/grade');
   } catch (error) {
