@@ -6090,7 +6090,7 @@ app.get('/fenix/grade/kick-callback', requireKickConfig, async (req, res) => {
       return res.redirect('/fenix/grade?erro=naoVinculado');
     }
 
-    req.session.fenixGradeUser = fenixUser.username;
+    req.session.fenixGradeUser = String(fenixUser.kickUsername || fenixUser.kickName || fenixUser.username || '').trim();
     res.redirect('/fenix/grade');
   } catch (error) {
     console.error('Erro no login Kick da grade:', error);
