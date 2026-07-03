@@ -6091,6 +6091,7 @@ app.get('/fenix/grade/kick-callback', requireKickConfig, async (req, res) => {
     }
 
     req.session.fenixGradeUser = String(fenixUser.kickUsername || fenixUser.kickName || fenixUser.username || '').trim();
+    req.session.fenixGradeUserId = fenixUser.id;
     res.redirect('/fenix/grade');
   } catch (error) {
     console.error('Erro no login Kick da grade:', error);
@@ -6423,7 +6424,6 @@ app.post('/fenix/grade/raffle/join', express.json(), (req, res) => {
     return res.status(401).json({ ok: false, message: 'Faca login com a Kick primeiro.' });
   }
 
-  const username = String(req.session.fenixGradeUser || '').trim();
   const date = String(req.body && req.body.date || '').trim();
   const hour = String(req.body && req.body.hour || '').trim();
 
@@ -6432,6 +6432,12 @@ app.post('/fenix/grade/raffle/join', express.json(), (req, res) => {
   }
 
   const data = readFenixData();
+
+  const freshUser = (Array.isArray(data.users) ? data.users.find((u) => u.id === req.session.fenixGradeUserId) : null);
+  const username = String((freshUser && (freshUser.kickUsername || freshUser.kickName)) || req.session.fenixGradeUser || '').trim();
+  if (!username) {
+    return res.status(400).json({ ok: false, message: 'Nao foi possivel identificar seu nick da Kick. Saia e entre novamente.' });
+  }
   const civilMonday = fenixMondayOfWeekFinal(new Date());
   const civilWeekStart = fenixDateOnlyFinal(civilMonday);
   const civilWeekEnd = fenixDateOnlyFinal(fenixAddDaysFinal(civilMonday, 6));
