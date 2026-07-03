@@ -6390,6 +6390,32 @@ function fenixProcessRaffles143() {
   return { processed, filled };
 }
 
+// FENIX_GRADE_RAFFLE_TEST_JOIN_TEMP
+app.get('/fenix/grade/raffle/test-join', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
+  const date = String(req.query?.date || '').trim();
+  const hour = String(req.query?.hour || '').trim();
+  const nick = String(req.query?.nick || '').trim();
+  if (!date || !hour || !nick) {
+    return res.status(400).json({ ok: false, message: 'Faltou date, hour ou nick.' });
+  }
+  const civilMonday = fenixMondayOfWeekFinal(new Date());
+  const civilWeekStart = fenixDateOnlyFinal(civilMonday);
+  const raffle = fenixReadGradeRaffleFinal();
+  if (raffle.weekStart !== civilWeekStart) {
+    raffle.weekStart = civilWeekStart;
+    raffle.slots = {};
+    raffle.wins = {};
+    raffle.resolved = {};
+  }
+  const slotKey = date + '_' + hour;
+  const list = Array.isArray(raffle.slots[slotKey]) ? raffle.slots[slotKey] : [];
+  if (!list.some((u) => String(u).toLowerCase() === nick.toLowerCase())) list.push(nick);
+  raffle.slots[slotKey] = list;
+  if (raffle.resolved && raffle.resolved[slotKey]) delete raffle.resolved[slotKey];
+  fenixSaveGradeRaffleFinal(raffle);
+  res.json({ ok: true, slotKey, participants: list });
+});
+
 // FENIX_GRADE_RAFFLE_RUN_NOW_ROUTE_FINAL
 app.get('/fenix/grade/raffle/run-now', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
   try {
