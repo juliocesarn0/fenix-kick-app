@@ -5864,6 +5864,7 @@ function fenixSlotDateTimeFinal(dateKey, hourKey) {
 }
 
 const FENIX_GRADE_RAFFLE_CUTOFF_MS_143 = 15 * 60 * 1000;
+const FENIX_GRADE_RAFFLE_OPEN_MS_143 = 60 * 60 * 1000;
 
 function fenixSlotIsVacant143(slot) {
   if (!slot) return true;
@@ -6103,11 +6104,14 @@ function fenixRenderGradePage(req, res) {
 
     const slotTime = fenixSlotDateTimeFinal(day, hour);
     const closed = (slotTime - nowMsGrade) <= FENIX_GRADE_RAFFLE_CUTOFF_MS_143;
+    const notOpenYet = (slotTime - nowMsGrade) > FENIX_GRADE_RAFFLE_OPEN_MS_143;
     const slotKey = day + '_' + hour;
     const participants = Array.isArray(raffleSlots[slotKey]) ? raffleSlots[slotKey] : [];
     const alreadyJoined = participants.some((u) => String(u).toLowerCase() === currentGradeUser.toLowerCase());
     const alreadyInSlot = fenixUserAlreadyInSlot143(data.schedule, day, hour, currentGradeUser);
-
+    if (notOpenYet) {
+      return '<span class="vazio">Abre 1h antes</span>';
+    }
     if (closed) {
       return '<span class="raffleClosed">Sorteio encerrado (' + participants.length + ')</span>';
     }
@@ -6282,6 +6286,9 @@ app.post('/fenix/grade/raffle/join', express.json(), (req, res) => {
   }
 
   const now = Date.now();
+  if (nextSlot.slotTime - now > FENIX_GRADE_RAFFLE_OPEN_MS_143) {
+    return res.status(403).json({ ok: false, message: 'As inscricoes para esse horario ainda nao abriram (abre 1h antes).' });
+  }
   if (nextSlot.slotTime - now <= FENIX_GRADE_RAFFLE_CUTOFF_MS_143) {
     return res.status(403).json({ ok: false, message: 'As inscricoes para esse horario ja fecharam.' });
   }
