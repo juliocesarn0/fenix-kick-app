@@ -6257,6 +6257,38 @@ function fenixRenderGradePage(req, res) {
   `);
 }
 
+// FENIX_GRADE_RAFFLE_DEBUG_TEMP
+app.get('/fenix/grade/raffle/debug', (req, res) => {
+  if (!req.session || !req.session.fenixGradeUser) {
+    return res.status(401).json({ ok: false, message: 'Faca login primeiro.' });
+  }
+  const data = readFenixData();
+  const civilMonday = fenixMondayOfWeekFinal(new Date());
+  const civilWeekStart = fenixDateOnlyFinal(civilMonday);
+  const civilWeekEnd = fenixDateOnlyFinal(fenixAddDaysFinal(civilMonday, 6));
+  const nextSlot = fenixFindNextRaffleSlot143(data.schedule, civilWeekStart, civilWeekEnd);
+
+  const vacantSlots = [];
+  for (const slot of (Array.isArray(data.schedule) ? data.schedule : [])) {
+    if (!slot || slot.slotDate < civilWeekStart || slot.slotDate > civilWeekEnd) continue;
+    if (fenixSlotIsVacant143(slot)) {
+      const slotTime = fenixSlotDateTimeFinal(slot.slotDate, slot.slotHour);
+      vacantSlots.push({ date: slot.slotDate, hour: slot.slotHour, slotTime, isFuture: slotTime > Date.now() });
+    }
+  }
+
+  res.json({
+    ok: true,
+    serverNow: new Date().toISOString(),
+    serverNowMs: Date.now(),
+    civilWeekStart,
+    civilWeekEnd,
+    nextSlot,
+    totalVacant: vacantSlots.length,
+    vacantSlots: vacantSlots.slice(0, 20)
+  });
+});
+
 // FENIX_GRADE_RAFFLE_JOIN_ROUTE_FINAL
 app.post('/fenix/grade/raffle/join', express.json(), (req, res) => {
   if (!req.session || !req.session.fenixGradeUser) {
