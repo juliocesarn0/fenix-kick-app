@@ -6391,7 +6391,7 @@ function fenixProcessRaffles143() {
 }
 
 // FENIX_GRADE_RAFFLE_RUN_NOW_ROUTE_FINAL
-app.get('/fenix/grade/raffle/run-now', requireFenixAdmin, (req, res) => {
+app.get('/fenix/grade/raffle/run-now', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
   try {
     const result = fenixProcessRaffles143();
     res.json({ ok: true, result });
