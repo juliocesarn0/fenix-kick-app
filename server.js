@@ -6285,7 +6285,9 @@ app.get('/fenix/grade/raffle/debug', (req, res) => {
     civilWeekEnd,
     nextSlot,
     totalVacant: vacantSlots.length,
-    vacantSlots: vacantSlots.slice(0, 20)
+    totalVacant: vacantSlots.length,
+    sampleSlot: (Array.isArray(data.schedule) ? data.schedule.find((s) => s.slotHour === '22:00' && s.slotDate >= civilWeekStart && s.slotDate <= civilWeekEnd) : null) || 'nenhum slot 22:00 encontrado',
+    firstThreeSlots: (Array.isArray(data.schedule) ? data.schedule.slice(0, 3) : []),
   });
 });
 
