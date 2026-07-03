@@ -5860,7 +5860,7 @@ function fenixSlotDateTimeFinal(dateKey, hourKey) {
   const parts = String(dateKey || '').split('-').map(Number);
   const hour = Number(String(hourKey || '00:00').split(':')[0]);
   if (parts.length !== 3) return 0;
-  return new Date(parts[0], parts[1] - 1, parts[2], hour, 0, 0).getTime();
+  return Date.UTC(parts[0], parts[1] - 1, parts[2], hour + 3, 0, 0);
 }
 
 const FENIX_GRADE_RAFFLE_CUTOFF_MS_143 = 15 * 60 * 1000;
