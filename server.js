@@ -6256,40 +6256,6 @@ function fenixRenderGradePage(req, res) {
   `);
 }
 
-// FENIX_GRADE_RAFFLE_DEBUG_TEMP
-app.get('/fenix/grade/raffle/debug', (req, res) => {
-  if (!req.session || !req.session.fenixGradeUser) {
-    return res.status(401).json({ ok: false, message: 'Faca login primeiro.' });
-  }
-  const data = readFenixData();
-  const civilMonday = fenixMondayOfWeekFinal(new Date());
-  const civilWeekStart = fenixDateOnlyFinal(civilMonday);
-  const civilWeekEnd = fenixDateOnlyFinal(fenixAddDaysFinal(civilMonday, 6));
-  const nextSlot = fenixFindNextRaffleSlot143(data.schedule, civilWeekStart, civilWeekEnd);
-
-  const vacantSlots = [];
-  for (const slot of (Array.isArray(data.schedule) ? data.schedule : [])) {
-    if (!slot || slot.slotDate < civilWeekStart || slot.slotDate > civilWeekEnd) continue;
-    if (fenixSlotIsVacant143(slot)) {
-      const slotTime = fenixSlotDateTimeFinal(slot.slotDate, slot.slotHour);
-      vacantSlots.push({ date: slot.slotDate, hour: slot.slotHour, slotTime, isFuture: slotTime > Date.now() });
-    }
-  }
-
-  res.json({
-    ok: true,
-    serverNow: new Date().toISOString(),
-    serverNowMs: Date.now(),
-    civilWeekStart,
-    civilWeekEnd,
-    nextSlot,
-    totalVacant: vacantSlots.length,
-    futureVacantSorted: vacantSlots.filter((v) => v.isFuture).sort((a, b) => a.slotTime - b.slotTime).slice(0, 10),
-    sampleSlot: (Array.isArray(data.schedule) ? data.schedule.find((s) => s.slotHour === '23:00' && s.slotDate === '2026-07-02') : null) || 'nenhum slot 02-07 23:00 encontrado',
-    firstThreeSlots: (Array.isArray(data.schedule) ? data.schedule.slice(0, 3) : []),
-  });
-});
-
 // FENIX_GRADE_RAFFLE_JOIN_ROUTE_FINAL
 app.post('/fenix/grade/raffle/join', express.json(), (req, res) => {
   if (!req.session || !req.session.fenixGradeUser) {
