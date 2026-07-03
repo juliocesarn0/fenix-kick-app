@@ -6402,6 +6402,11 @@ function fenixProcessRaffles143() {
   return { processed, filled };
 }
 
+// FENIX_RAFFLE_DEBUG_STATE_TEMP
+app.get('/fenix/grade/raffle/debug-state', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
+  res.json({ ok: true, raffle: fenixReadGradeRaffleFinal() });
+});
+
 // FENIX_GRADE_RAFFLE_RUN_NOW_ROUTE_FINAL
 app.get('/fenix/grade/raffle/run-now', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
   try {
