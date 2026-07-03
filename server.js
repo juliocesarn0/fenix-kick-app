@@ -5834,16 +5834,17 @@ function fenixGradeRaffleFileFinal() {
 
 function fenixReadGradeRaffleFinal() {
   const file = fenixGradeRaffleFileFinal();
-  if (!fs.existsSync(file)) return { weekStart: '', slots: {}, wins: {} };
+  if (!fs.existsSync(file)) return { weekStart: '', slots: {}, wins: {}, resolved: {} };
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
     return {
       weekStart: String(parsed.weekStart || ''),
       slots: parsed.slots && typeof parsed.slots === 'object' ? parsed.slots : {},
-      wins: parsed.wins && typeof parsed.wins === 'object' ? parsed.wins : {}
+      wins: parsed.wins && typeof parsed.wins === 'object' ? parsed.wins : {},
+      resolved: parsed.resolved && typeof parsed.resolved === 'object' ? parsed.resolved : {}
     };
   } catch (e) {
-    return { weekStart: '', slots: {}, wins: {} };
+    return { weekStart: '', slots: {}, wins: {}, resolved: {} };
   }
 }
 
@@ -6404,6 +6405,11 @@ function fenixProcessRaffles143() {
 
 // FENIX_RAFFLE_DEBUG_STATE_TEMP
 app.get('/fenix/grade/raffle/debug-state', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
+  if (String(req.query?.reset || '') === '1') {
+    const civilMonday = fenixMondayOfWeekFinal(new Date());
+    fenixSaveGradeRaffleFinal({ weekStart: fenixDateOnlyFinal(civilMonday), slots: {}, wins: {}, resolved: {} });
+    return res.json({ ok: true, reset: true, raffle: fenixReadGradeRaffleFinal() });
+  }
   res.json({ ok: true, raffle: fenixReadGradeRaffleFinal() });
 });
 
