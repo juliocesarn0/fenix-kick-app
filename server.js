@@ -6161,6 +6161,9 @@ function fenixRenderGradePage(req, res) {
     const isVacant = fenixSlotIsVacant143(slot);
     if (!isVacant) return '<span class="vazio">-</span>';
 
+    const slotTimeCheck = fenixSlotDateTimeFinal(day, hour);
+    if (slotTimeCheck > 0 && (slotTimeCheck - nowMsGrade) <= 0) return '<span class="vazio">-</span>';
+
     const isNext = nextRaffleSlot && nextRaffleSlot.date === day && nextRaffleSlot.hour === hour;
     if (!isNext) return '<span class="vazio">Aguardando vez</span>';
 
@@ -6402,16 +6405,6 @@ function fenixProcessRaffles143() {
 
   return { processed, filled };
 }
-
-// FENIX_RAFFLE_DEBUG_STATE_TEMP
-app.get('/fenix/grade/raffle/debug-state', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
-  if (String(req.query?.reset || '') === '1') {
-    const civilMonday = fenixMondayOfWeekFinal(new Date());
-    fenixSaveGradeRaffleFinal({ weekStart: fenixDateOnlyFinal(civilMonday), slots: {}, wins: {}, resolved: {} });
-    return res.json({ ok: true, reset: true, raffle: fenixReadGradeRaffleFinal() });
-  }
-  res.json({ ok: true, raffle: fenixReadGradeRaffleFinal() });
-});
 
 // FENIX_GRADE_RAFFLE_RUN_NOW_ROUTE_FINAL
 app.get('/fenix/grade/raffle/run-now', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
