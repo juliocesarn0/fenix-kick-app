@@ -6096,6 +6096,7 @@ function fenixRenderGradePage(req, res) {
 
   const tables = days.map((day) => {
   function raffleCellHtml143(day, hour, slot) {
+    return '<span class="vazio">-</span>'; // FENIX_RAFFLE_DISABLED_UNTIL_ETAPA2 - remover esta linha para reativar
     const isVacant = fenixSlotIsVacant143(slot);
     if (!isVacant) return '<span class="vazio">-</span>';
 
