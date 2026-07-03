@@ -6167,12 +6167,12 @@ function fenixRenderGradePage(req, res) {
   .vazio{color:#5a6577}
   form.logout{margin:0}
   button.logoutBtn{border:1px solid rgba(255,82,82,.5);background:rgba(255,82,82,.12);color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:800;font-size:12px}
-</style>
   .raffleBtn{border:1px solid rgba(0,255,106,.6);background:rgba(0,255,106,.14);color:#fff;padding:5px 9px;border-radius:8px;cursor:pointer;font-weight:800;font-size:11px}
   .raffleBtn:hover{background:rgba(0,255,106,.28)}
   .raffleBtn:disabled{opacity:.5;cursor:default}
   .raffleJoined{color:#00ff6a;font-weight:800;font-size:11px}
   .raffleClosed{color:#f5b22a;font-weight:800;font-size:11px}
+</style>
 </head>
 <body>
   <header>
