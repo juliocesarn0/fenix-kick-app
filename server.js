@@ -5870,7 +5870,7 @@ function fenixSlotIsVacant143(slot) {
   for (let screen = 1; screen <= 3; screen += 1) {
     const name = slot['screen' + screen + 'Name'] || '';
     const maintenance = Boolean(slot['screen' + screen + 'Maintenance']);
-    if (!name && !maintenance) return true;
+    if (!name) return true;
   }
   return false;
 }
