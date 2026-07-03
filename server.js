@@ -6216,8 +6216,6 @@ function fenixRenderGradePage(req, res) {
   }
 
   input.addEventListener('input', applyFilter);
-</script>
-
   document.addEventListener('click', function(ev){
     const btn = ev.target && ev.target.closest ? ev.target.closest('.raffleBtn') : null;
     if (!btn) return;
@@ -6252,6 +6250,7 @@ function fenixRenderGradePage(req, res) {
   if (document.querySelector('.raffleBtn') || document.querySelector('.raffleJoined')) {
     setTimeout(function(){ location.reload(); }, 20000);
   }
+</script>
 </body>
 </html>
   `);
