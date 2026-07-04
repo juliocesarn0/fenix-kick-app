@@ -5940,11 +5940,12 @@ function fenixRaffleDrawOne143(candidates, wins) {
 }
 
 // FENIX_GRADE_RAFFLE_RESOLVE_SLOT_FINAL
-function fenixRaffleResolveSlot143(slot, participants, wins, guaranteed) {
+function fenixRaffleResolveSlot143(slot, participants, wins, guaranteed, recentWinners) {
   const results = [];
   if (!slot) return results;
 
   const guar = guaranteed && typeof guaranteed === 'object' ? guaranteed : {};
+  const recent = recentWinners instanceof Set ? recentWinners : new Set();
   let candidates = (Array.isArray(participants) ? participants.slice() : []);
 
   // Remove quem ja esta em qualquer tela desse slot (fixo ou ja preenchido)
@@ -5964,7 +5965,10 @@ function fenixRaffleResolveSlot143(slot, participants, wins, guaranteed) {
     // Garantido: se algum candidato esta marcado como garantido, ele ganha primeiro
     let winner = candidates.find((c) => guar[String(c).toLowerCase()]);
     if (!winner) {
-      winner = fenixRaffleDrawOne143(candidates, wins);
+      // Prioriza quem NAO ganhou nos 2 slots anteriores
+      const fresh = candidates.filter((c) => !recent.has(String(c).toLowerCase()));
+      const pool = fresh.length ? fresh : candidates;
+      winner = fenixRaffleDrawOne143(pool, wins);
     }
     if (!winner) break;
 
@@ -6384,7 +6388,24 @@ function fenixProcessRaffles143() {
   const data = readFenixData();
   data.schedule = Array.isArray(data.schedule) ? data.schedule : [];
 
-  for (const slotKey of Object.keys(slots)) {
+  // Helper: dado um slotKey (data|hh:00), retorna o slotKey de N horas antes (cruza dia)
+  function fenixPrevSlotKey143(key, hoursBack) {
+    const p = String(key || '').split('_');
+    if (p.length !== 2) return '';
+    const dParts = p[0].split('-').map(Number);
+    const h = Number(String(p[1]).split(':')[0]);
+    if (dParts.length !== 3 || !Number.isFinite(h)) return '';
+    const d = new Date(Date.UTC(dParts[0], dParts[1] - 1, dParts[2], h, 0, 0));
+    d.setUTCHours(d.getUTCHours() - hoursBack);
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    const hh = String(d.getUTCHours()).padStart(2, '0');
+    return y + '-' + m + '-' + dd + '_' + hh + ':00';
+  }
+
+  const orderedSlotKeys = Object.keys(slots).sort();
+  for (const slotKey of orderedSlotKeys) {
     if (resolved[slotKey]) continue; // ja sorteado
 
     const parts = slotKey.split('_');
@@ -6403,7 +6424,19 @@ function fenixProcessRaffles143() {
     if (!slot) { resolved[slotKey] = { at: now, winners: [] }; continue; }
 
     const participants = Array.isArray(slots[slotKey]) ? slots[slotKey] : [];
-    const drawResults = fenixRaffleResolveSlot143(slot, participants, wins, raffle.guaranteed);
+
+    // Monta set de ganhadores dos 2 slots anteriores (para dar prioridade a quem nao ganhou)
+    const recentWinners = new Set();
+    for (const back of [1, 2]) {
+      const prevKey = fenixPrevSlotKey143(slotKey, back);
+      const prev = prevKey && resolved[prevKey];
+      const prevList = prev && Array.isArray(prev.winners) ? prev.winners : [];
+      for (const w of prevList) {
+        if (w && w.winner) recentWinners.add(String(w.winner).toLowerCase());
+      }
+    }
+
+    const drawResults = fenixRaffleResolveSlot143(slot, participants, wins, raffle.guaranteed, recentWinners);
 
     processed += 1;
 
