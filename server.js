@@ -6434,16 +6434,6 @@ function fenixProcessRaffles143() {
   return { processed, filled };
 }
 
-// FENIX_GRADE_URL_CHECK_TEMP
-app.get('/fenix/grade/url-check', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
-  const q = String(req.query?.nick || '').trim().toLowerCase();
-  const applicants = fenixReadFormApplicantsFileFinal();
-  const results = (Array.isArray(applicants) ? applicants : [])
-    .filter((a) => String(a.nick || '').toLowerCase().includes(q) || String(a.slug || '').toLowerCase().includes(q))
-    .map((a) => ({ nick: a.nick, slug: a.slug, url: a.url }));
-  res.json({ ok: true, count: results.length, results: results.slice(0, 20) });
-});
-
 // FENIX_GRADE_RAFFLE_RUN_NOW_ROUTE_FINAL
 app.get('/fenix/grade/raffle/run-now', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
   try {
