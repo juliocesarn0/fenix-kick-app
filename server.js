@@ -6339,14 +6339,13 @@ function fenixRenderGradePage(req, res) {
 
 // FENIX_GRADE_RAFFLE_PROCESS_FINAL
 function fenixRaffleWinnerUrl143(winnerNick) {
-  const target = String(winnerNick || '').trim().toLowerCase();
+  const norm = (v) => String(v || '').trim().toLowerCase().replace(/[_-]/g, '');
+  const target = norm(winnerNick);
   if (!target) return '';
   try {
     const applicants = fenixReadFormApplicantsFileFinal();
     const found = Array.isArray(applicants) ? applicants.find((a) => {
-      const nick = String(a.nick || '').trim().toLowerCase();
-      const slug = String(a.slug || '').trim().toLowerCase();
-      return nick === target || slug === target;
+      return norm(a.nick) === target || norm(a.slug) === target;
     }) : null;
     if (found && found.url && /kick\.com\//i.test(found.url)) {
       return found.url;
