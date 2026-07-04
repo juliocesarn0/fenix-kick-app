@@ -6334,7 +6334,7 @@ function fenixRenderGradePage(req, res) {
   var diaAtivo = 'Todos';
 
   function filtrarDia(dia) {
-    diaAtivo = dia;
+    diaAtivo = dia; window.location.hash = dia;
     var days = document.querySelectorAll('.fenixGradeDay');
     days.forEach(function(d) {
       var h2 = d.querySelector('h2');
@@ -6364,6 +6364,8 @@ function fenixRenderGradePage(req, res) {
   });
   if (searchBox) searchBox.parentNode.insertBefore(diasDiv, searchBox);
 
+  var hashDia = (window.location.hash || '').replace('#','');
+  if (hashDia && diasBtns.indexOf(hashDia) !== -1 && hashDia !== 'Todos') filtrarDia(hashDia);
   var origApplyFilter = applyFilter;
   applyFilter = function() {
     var query = norm(input.value);
