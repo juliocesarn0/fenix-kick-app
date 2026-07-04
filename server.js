@@ -6436,6 +6436,11 @@ function fenixProcessRaffles143() {
 // FENIX_RAFFLE_STATE_CHECK_TEMP
 app.get('/fenix/grade/raffle/state', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
   const raffle = fenixReadGradeRaffleFinal();
+  if (String(req.query?.reset || '') === 'wins') {
+    raffle.wins = {};
+    fenixSaveGradeRaffleFinal(raffle);
+    return res.json({ ok: true, resetWins: true, wins: raffle.wins });
+  }
   const slotsInfo = {};
   for (const key of Object.keys(raffle.slots || {})) {
     slotsInfo[key] = {
