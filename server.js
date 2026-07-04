@@ -5844,17 +5844,18 @@ function fenixGradeRaffleFileFinal() {
 
 function fenixReadGradeRaffleFinal() {
   const file = fenixGradeRaffleFileFinal();
-  if (!fs.existsSync(file)) return { weekStart: '', slots: {}, wins: {}, resolved: {} };
+  if (!fs.existsSync(file)) return { weekStart: '', slots: {}, wins: {}, resolved: {}, guaranteed: {} };
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
     return {
       weekStart: String(parsed.weekStart || ''),
       slots: parsed.slots && typeof parsed.slots === 'object' ? parsed.slots : {},
       wins: parsed.wins && typeof parsed.wins === 'object' ? parsed.wins : {},
-      resolved: parsed.resolved && typeof parsed.resolved === 'object' ? parsed.resolved : {}
+      resolved: parsed.resolved && typeof parsed.resolved === 'object' ? parsed.resolved : {},
+      guaranteed: parsed.guaranteed && typeof parsed.guaranteed === 'object' ? parsed.guaranteed : {}
     };
   } catch (e) {
-    return { weekStart: '', slots: {}, wins: {}, resolved: {} };
+    return { weekStart: '', slots: {}, wins: {}, resolved: {}, guaranteed: {} };
   }
 }
 
@@ -5939,10 +5940,11 @@ function fenixRaffleDrawOne143(candidates, wins) {
 }
 
 // FENIX_GRADE_RAFFLE_RESOLVE_SLOT_FINAL
-function fenixRaffleResolveSlot143(slot, participants, wins) {
+function fenixRaffleResolveSlot143(slot, participants, wins, guaranteed) {
   const results = [];
   if (!slot) return results;
 
+  const guar = guaranteed && typeof guaranteed === 'object' ? guaranteed : {};
   let candidates = (Array.isArray(participants) ? participants.slice() : []);
 
   // Remove quem ja esta em qualquer tela desse slot (fixo ou ja preenchido)
@@ -5959,7 +5961,11 @@ function fenixRaffleResolveSlot143(slot, participants, wins) {
     if (name) continue; // manual tem prioridade: tela ja preenchida, pula
     if (!candidates.length) break;
 
-    const winner = fenixRaffleDrawOne143(candidates, wins);
+    // Garantido: se algum candidato esta marcado como garantido, ele ganha primeiro
+    let winner = candidates.find((c) => guar[String(c).toLowerCase()]);
+    if (!winner) {
+      winner = fenixRaffleDrawOne143(candidates, wins);
+    }
     if (!winner) break;
 
     results.push({ screen, winner });
@@ -6397,7 +6403,7 @@ function fenixProcessRaffles143() {
     if (!slot) { resolved[slotKey] = { at: now, winners: [] }; continue; }
 
     const participants = Array.isArray(slots[slotKey]) ? slots[slotKey] : [];
-    const drawResults = fenixRaffleResolveSlot143(slot, participants, wins);
+    const drawResults = fenixRaffleResolveSlot143(slot, participants, wins, raffle.guaranteed);
 
     processed += 1;
 
@@ -6543,6 +6549,112 @@ setInterval(() => {
     FENIX_RAFFLE_AUTO_RUNNING_143 = false;
   }
 }, 60 * 1000);
+
+// FENIX_SORTEIO_CENTRAL_PAGE
+function fenixRenderSorteioCentralPage({ participants = [], guaranteed = {}, message = '' } = {}) {
+  const rows = participants.map((name) => {
+    const key = String(name).toLowerCase();
+    const isGuar = !!guaranteed[key];
+    const badge = isGuar
+      ? '<span style="background:#0a7d2d;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;">GARANTIDO</span>'
+      : '<span style="color:#888;font-size:12px;">-</span>';
+    const action = isGuar ? 'remover' : 'adicionar';
+    const label = isGuar ? 'Remover garantido' : 'Marcar garantido';
+    return '<tr>'
+      + '<td style="padding:6px 10px;border-bottom:1px solid #222;">' + name + '</td>'
+      + '<td style="padding:6px 10px;border-bottom:1px solid #222;">' + badge + '</td>'
+      + '<td style="padding:6px 10px;border-bottom:1px solid #222;">'
+      + '<form method="post" action="/admin/sorteio-central/toggle" style="display:inline;">'
+      + '<input type="hidden" name="adminSecret" value="" class="js-secret" />'
+      + '<input type="hidden" name="name" value="' + name + '" />'
+      + '<input type="hidden" name="action" value="' + action + '" />'
+      + '<button type="submit" style="background:#222;color:#fff;border:1px solid #444;padding:4px 10px;border-radius:4px;cursor:pointer;">' + label + '</button>'
+      + '</form>'
+      + '</td>'
+      + '</tr>';
+  }).join('');
+
+  const msgHtml = message ? '<div style="background:#1a3a5a;color:#cfe;padding:10px;border-radius:6px;margin-bottom:12px;">' + message + '</div>' : '';
+
+  const guarCount = Object.keys(guaranteed || {}).filter((k) => guaranteed[k]).length;
+
+  return '<!doctype html><html lang="pt-br"><head><meta charset="utf-8" />'
+    + '<title>Central de Sorteio - Fenix</title>'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1" />'
+    + '</head><body style="background:#0d0d0d;color:#eee;font-family:system-ui,Arial,sans-serif;margin:0;padding:24px;">'
+    + '<div style="max-width:900px;margin:0 auto;">'
+    + '<h1 style="margin:0 0 8px;">Central de Sorteio</h1>'
+    + '<p style="color:#999;margin:0 0 20px;">Gerencie os participantes garantidos do sorteio da grade. Garantidos ganham prioridade nas telas vazias.</p>'
+    + msgHtml
+    + '<form method="post" action="/admin/sorteio-central/ver" style="background:#151515;padding:16px;border-radius:8px;margin-bottom:20px;">'
+    + '<label style="display:block;margin-bottom:6px;color:#bbb;">Senha admin:</label>'
+    + '<input type="password" name="adminSecret" required style="width:100%;padding:8px;background:#0a0a0a;color:#fff;border:1px solid #333;border-radius:4px;box-sizing:border-box;" />'
+    + '<button type="submit" style="margin-top:10px;background:#0a7d2d;color:#fff;border:0;padding:8px 16px;border-radius:4px;cursor:pointer;">Carregar participantes</button>'
+    + '</form>'
+    + (participants.length ? (
+        '<div style="background:#151515;padding:16px;border-radius:8px;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
+        + '<strong>Participantes (' + participants.length + ')</strong>'
+        + '<span style="color:#0a7d2d;">Garantidos: ' + guarCount + '</span>'
+        + '</div>'
+        + '<table style="width:100%;border-collapse:collapse;">'
+        + '<thead><tr style="text-align:left;color:#999;">'
+        + '<th style="padding:6px 10px;border-bottom:1px solid #333;">Nome</th>'
+        + '<th style="padding:6px 10px;border-bottom:1px solid #333;">Status</th>'
+        + '<th style="padding:6px 10px;border-bottom:1px solid #333;">Acao</th>'
+        + '</tr></thead>'
+        + '<tbody>' + rows + '</tbody>'
+        + '</table>'
+        + '<script>(function(){var s=prompt("Confirme a senha admin para as acoes:")||"";document.querySelectorAll(".js-secret").forEach(function(i){i.value=s;});})();</script>'
+        + '</div>'
+      ) : '')
+    + '</div></body></html>';
+}
+
+app.get('/admin/sorteio-central', (req, res) => {
+  res.type('html').send(fenixRenderSorteioCentralPage());
+});
+
+app.post('/admin/sorteio-central/ver', fenixSimpleAdminAuth, (req, res) => {
+  const raffle = fenixReadGradeRaffleFinal();
+  const slots = raffle.slots && typeof raffle.slots === 'object' ? raffle.slots : {};
+  const set = new Set();
+  for (const key of Object.keys(slots)) {
+    const list = Array.isArray(slots[key]) ? slots[key] : [];
+    for (const name of list) { if (name) set.add(String(name)); }
+  }
+  const participants = Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  res.type('html').send(fenixRenderSorteioCentralPage({ participants, guaranteed: raffle.guaranteed || {} }));
+});
+
+app.post('/admin/sorteio-central/toggle', fenixSimpleAdminAuth, (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  const action = String(req.body?.action || '').trim();
+  if (!name) return res.status(400).type('html').send('<p>Nome vazio</p><a href="/admin/sorteio-central">Voltar</a>');
+
+  const raffle = fenixReadGradeRaffleFinal();
+  raffle.guaranteed = raffle.guaranteed && typeof raffle.guaranteed === 'object' ? raffle.guaranteed : {};
+  const key = name.toLowerCase();
+
+  if (action === 'adicionar') { raffle.guaranteed[key] = true; }
+  else if (action === 'remover') { delete raffle.guaranteed[key]; }
+
+  fenixSaveGradeRaffleFinal(raffle);
+
+  const slots = raffle.slots && typeof raffle.slots === 'object' ? raffle.slots : {};
+  const set = new Set();
+  for (const k of Object.keys(slots)) {
+    const list = Array.isArray(slots[k]) ? slots[k] : [];
+    for (const n of list) { if (n) set.add(String(n)); }
+  }
+  const participants = Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+  const msg = action === 'adicionar'
+    ? '"' + name + '" marcado como GARANTIDO.'
+    : '"' + name + '" removido dos garantidos.';
+
+  res.type('html').send(fenixRenderSorteioCentralPage({ participants, guaranteed: raffle.guaranteed, message: msg }));
+});
 
 app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
