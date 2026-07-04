@@ -3125,6 +3125,15 @@ function fenixNormalizeKickNick(value) {
   return nick;
 }
 
+function fenixKickUrlFromFormLink143(rawLink, nick) {
+  const raw = String(rawLink || '').trim();
+  const match = raw.match(/kick\.com\/([A-Za-z0-9_-]+)/i);
+  if (match && match[1]) {
+    return 'https://kick.com/' + match[1];
+  }
+  return fenixKickUrlFromNick(nick);
+}
+
 function fenixKickUrlFromNick(nick) {
   const clean = fenixNormalizeKickNick(nick);
   return clean ? 'https://kick.com/' + clean.toLowerCase() : '';
@@ -3221,6 +3230,7 @@ function fenixParseApplicantsFromPaste(pastedText) {
     const name = fenixCell(cols, idxName);
     const nickFromNick = fenixNormalizeKickNick(fenixCell(cols, idxNick));
     const nickFromLink = fenixNormalizeKickNick(fenixCell(cols, idxLink));
+    const rawLinkFromForm = String(fenixCell(cols, idxLink) || '').trim();
     const nick = nickFromNick || nickFromLink;
 
     if (!nick) continue;
@@ -3239,7 +3249,7 @@ function fenixParseApplicantsFromPaste(pastedText) {
       name,
       nick,
       slug: nick.toLowerCase(),
-      url: fenixKickUrlFromNick(nick),
+      url: fenixKickUrlFromFormLink143(rawLinkFromForm, nick),
       whatsapp: fenixCell(cols, idxWhats),
       email: fenixCell(cols, idxEmail),
       referredBy: fenixCell(cols, idxIndicado),
@@ -6328,6 +6338,23 @@ function fenixRenderGradePage(req, res) {
 }
 
 // FENIX_GRADE_RAFFLE_PROCESS_FINAL
+function fenixRaffleWinnerUrl143(winnerNick) {
+  const target = String(winnerNick || '').trim().toLowerCase();
+  if (!target) return '';
+  try {
+    const applicants = fenixReadFormApplicantsFileFinal();
+    const found = Array.isArray(applicants) ? applicants.find((a) => {
+      const nick = String(a.nick || '').trim().toLowerCase();
+      const slug = String(a.slug || '').trim().toLowerCase();
+      return nick === target || slug === target;
+    }) : null;
+    if (found && found.url && /kick\.com\//i.test(found.url)) {
+      return found.url;
+    }
+  } catch (e) {}
+  return 'https://kick.com/' + winnerNick;
+}
+
 function fenixProcessRaffles143() {
   const civilMonday = fenixMondayOfWeekFinal(new Date());
   const civilWeekStart = fenixDateOnlyFinal(civilMonday);
@@ -6380,7 +6407,7 @@ function fenixProcessRaffles143() {
       const winner = r.winner;
       const screen = r.screen;
       slot['screen' + screen + 'Name'] = winner;
-      slot['screen' + screen + 'Url'] = 'https://kick.com/' + winner;
+      slot['screen' + screen + 'Url'] = fenixRaffleWinnerUrl143(winner);
       slot['screen' + screen + 'Maintenance'] = false;
       wins[String(winner).toLowerCase()] = Number(wins[String(winner).toLowerCase()] || 0) + 1;
       winnersLog.push({ screen, winner });
