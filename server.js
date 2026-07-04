@@ -2553,15 +2553,15 @@ app.post('/api/fenix/admin/schedule', requireFenixAdmin, (req, res) => {
   }
 
   slot.screen1Name = String(req.body?.screen1Name || '').trim();
-  slot.screen1Url = String(req.body?.screen1Url || '').trim() || (slot.screen1Name ? fenixRaffleWinnerUrl143(slot.screen1Name) : '');
+  slot.screen1Url = slot.screen1Name ? fenixRaffleWinnerUrl143(slot.screen1Name) : '';
   slot.screen1Maintenance = Boolean(req.body?.screen1Maintenance);
 
   slot.screen2Name = String(req.body?.screen2Name || '').trim();
-  slot.screen2Url = String(req.body?.screen2Url || '').trim() || (slot.screen2Name ? fenixRaffleWinnerUrl143(slot.screen2Name) : '');
+  slot.screen2Url = slot.screen2Name ? fenixRaffleWinnerUrl143(slot.screen2Name) : '';
   slot.screen2Maintenance = Boolean(req.body?.screen2Maintenance);
 
   slot.screen3Name = String(req.body?.screen3Name || '').trim();
-  slot.screen3Url = String(req.body?.screen3Url || '').trim() || (slot.screen3Name ? fenixRaffleWinnerUrl143(slot.screen3Name) : '');
+  slot.screen3Url = slot.screen3Name ? fenixRaffleWinnerUrl143(slot.screen3Name) : '';
   slot.screen3Maintenance = Boolean(req.body?.screen3Maintenance);
 
   slot.active = req.body?.active !== false;
