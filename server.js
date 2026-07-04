@@ -6439,24 +6439,6 @@ function fenixProcessRaffles143() {
   return { processed, filled };
 }
 
-// FENIX_RAFFLE_STATE_CHECK_TEMP
-app.get('/fenix/grade/raffle/state', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
-  const raffle = fenixReadGradeRaffleFinal();
-  if (String(req.query?.reset || '') === 'wins') {
-    raffle.wins = {};
-    fenixSaveGradeRaffleFinal(raffle);
-    return res.json({ ok: true, resetWins: true, wins: raffle.wins });
-  }
-  const slotsInfo = {};
-  for (const key of Object.keys(raffle.slots || {})) {
-    slotsInfo[key] = {
-      participantes: raffle.slots[key],
-      total: raffle.slots[key].length,
-      resolvido: raffle.resolved && raffle.resolved[key] ? raffle.resolved[key].winners : null
-    };
-  }
-  res.json({ ok: true, weekStart: raffle.weekStart, wins: raffle.wins, slots: slotsInfo });
-});
 
 // FENIX_GRADE_RAFFLE_RUN_NOW_ROUTE_FINAL
 app.get('/fenix/grade/raffle/run-now', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
