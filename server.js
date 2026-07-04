@@ -6309,7 +6309,6 @@ function fenixRenderGradePage(req, res) {
   }
 
   input.addEventListener('input', applyFilter);
-  document.addEventListener('click', function(ev){
 
   var isProx = window.location.search.includes('semana=proxima');
   var navDiv = document.createElement('div');
@@ -6326,6 +6325,8 @@ function fenixRenderGradePage(req, res) {
   navDiv.appendChild(btnProx);
   var searchBox = document.querySelector('.searchBox');
   if (searchBox) searchBox.parentNode.insertBefore(navDiv, searchBox);
+
+  document.addEventListener('click', function(ev){
     const btn = ev.target && ev.target.closest ? ev.target.closest('.raffleBtn') : null;
     if (!btn) return;
 
