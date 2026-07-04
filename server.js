@@ -6127,7 +6127,9 @@ app.post('/fenix/grade/logout', (req, res) => {
 function fenixRenderGradePage(req, res) {
   const data = readFenixData();
   const weeklyInfo = fenixWeeklyInfoFinal();
-  const civilMonday = fenixMondayOfWeekFinal(new Date());
+  const semanaParam = String(req.query?.semana || '').toLowerCase();
+  const isProximaSemana = semanaParam === 'proxima';
+  const civilMonday = isProximaSemana ? fenixAddDaysFinal(fenixMondayOfWeekFinal(new Date()), 7) : fenixMondayOfWeekFinal(new Date());
   const civilWeekStart = fenixDateOnlyFinal(civilMonday);
   const civilWeekEnd = fenixDateOnlyFinal(fenixAddDaysFinal(civilMonday, 6));
 
@@ -6308,6 +6310,22 @@ function fenixRenderGradePage(req, res) {
 
   input.addEventListener('input', applyFilter);
   document.addEventListener('click', function(ev){
+
+  var isProx = window.location.search.includes('semana=proxima');
+  var navDiv = document.createElement('div');
+  navDiv.style = 'display:flex;gap:8px;margin-bottom:16px;';
+  var btnAtual = document.createElement('a');
+  btnAtual.href = '/fenix/grade';
+  btnAtual.textContent = 'Esta semana';
+  btnAtual.style = 'padding:6px 14px;border-radius:8px;text-decoration:none;font-weight:800;font-size:13px;' + (isProx ? 'background:#222;color:#999;border:1px solid #333;' : 'background:rgba(0,255,106,.14);color:#00ff6a;border:1px solid rgba(0,255,106,.6);');
+  var btnProx = document.createElement('a');
+  btnProx.href = '/fenix/grade?semana=proxima';
+  btnProx.textContent = 'Proxima semana';
+  btnProx.style = 'padding:6px 14px;border-radius:8px;text-decoration:none;font-weight:800;font-size:13px;' + (isProx ? 'background:rgba(0,255,106,.14);color:#00ff6a;border:1px solid rgba(0,255,106,.6);' : 'background:#222;color:#999;border:1px solid #333;');
+  navDiv.appendChild(btnAtual);
+  navDiv.appendChild(btnProx);
+  var searchBox = document.querySelector('.searchBox');
+  if (searchBox) searchBox.parentNode.insertBefore(navDiv, searchBox);
     const btn = ev.target && ev.target.closest ? ev.target.closest('.raffleBtn') : null;
     if (!btn) return;
 
