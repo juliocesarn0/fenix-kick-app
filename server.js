@@ -6326,6 +6326,54 @@ function fenixRenderGradePage(req, res) {
   var searchBox = document.querySelector('.searchBox');
   if (searchBox) searchBox.parentNode.insertBefore(navDiv, searchBox);
 
+
+  var diasBtns = ['Todos','Seg','Ter','Qua','Qui','Sex','Sab','Dom'];
+  var diasLabels = {'Todos':'','Seg':'Segunda','Ter':'Terça','Qua':'Quarta','Qui':'Quinta','Sex':'Sexta','Sab':'Sábado','Dom':'Domingo'};
+  var diasDiv = document.createElement('div');
+  diasDiv.style = 'display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;';
+  var diaAtivo = 'Todos';
+
+  function filtrarDia(dia) {
+    diaAtivo = dia;
+    var days = document.querySelectorAll('.fenixGradeDay');
+    days.forEach(function(d) {
+      var h2 = d.querySelector('h2');
+      var txt = h2 ? h2.textContent : '';
+      if (dia === 'Todos' || txt.includes(diasLabels[dia])) {
+        d.style.display = '';
+      } else {
+        d.style.display = 'none';
+      }
+    });
+    diasDiv.querySelectorAll('a').forEach(function(b) {
+      if (b.textContent === dia) {
+        b.style.background = 'rgba(0,255,106,.14)'; b.style.color = '#00ff6a'; b.style.borderColor = 'rgba(0,255,106,.6)';
+      } else {
+        b.style.background = '#222'; b.style.color = '#999'; b.style.borderColor = '#333';
+      }
+    });
+  }
+
+  diasBtns.forEach(function(dia) {
+    var b = document.createElement('a');
+    b.href = '#';
+    b.textContent = dia;
+    b.style = 'padding:5px 12px;border-radius:8px;text-decoration:none;font-weight:800;font-size:12px;cursor:pointer;' + (dia === 'Todos' ? 'background:rgba(0,255,106,.14);color:#00ff6a;border:1px solid rgba(0,255,106,.6);' : 'background:#222;color:#999;border:1px solid #333;');
+    b.onclick = function(e) { e.preventDefault(); filtrarDia(dia); };
+    diasDiv.appendChild(b);
+  });
+  if (searchBox) searchBox.parentNode.insertBefore(diasDiv, searchBox);
+
+  var origApplyFilter = applyFilter;
+  applyFilter = function() {
+    var query = norm(input.value);
+    if (query) {
+      document.querySelectorAll('.fenixGradeDay').forEach(function(d) { d.style.display = ''; });
+    } else {
+      filtrarDia(diaAtivo);
+    }
+    origApplyFilter();
+  };
   document.addEventListener('click', function(ev){
     const btn = ev.target && ev.target.closest ? ev.target.closest('.raffleBtn') : null;
     if (!btn) return;
