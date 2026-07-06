@@ -5299,6 +5299,15 @@ function fenixApplyDrawToRealScheduleFinal(draw, options = {}) {
     saved += 1;
   }
 
+  // Corrige URLs da grade usando o formulario
+  for (const slot of data.schedule) {
+    for (let sc = 1; sc <= 3; sc += 1) {
+      const nm = String(slot['screen' + sc + 'Name'] || '').trim();
+      if (!nm) continue;
+      slot['screen' + sc + 'Url'] = fenixRaffleWinnerUrl143(nm);
+    }
+  }
+
   writeFenixData(data);
 
   return {
