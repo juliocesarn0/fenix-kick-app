@@ -6798,7 +6798,7 @@ function fenixRenderSorteioCentralPage({ participants = [], guaranteed = {}, win
 }
 
 app.get('/admin/sorteio-central', (req, res) => {
-  res.type('html').send(fenixRenderSorteioCentralPage());
+  const raffle = fenixReadGradeRaffleFinal();  const slots = raffle.slots && typeof raffle.slots === 'object' ? raffle.slots : {};  const normName = (v) => String(v || '').toLowerCase().replace(/[_-]/g, '');  const applicants = fenixReadFormApplicantsFileFinal();  const validNicks = new Set((Array.isArray(applicants) ? applicants : []).map((a) => normName(a.nick || '')));  const nameMap = new Map();  for (const key of Object.keys(slots)) { const list = Array.isArray(slots[key]) ? slots[key] : []; for (const name of list) { if (!name) continue; const n = normName(name); if (!validNicks.has(n)) continue; const existing = nameMap.get(n); if (!existing || String(name).length > String(existing).length) nameMap.set(n, String(name)); } }  const participants = Array.from(nameMap.values()).sort((a, b) => a.localeCompare(b, 'pt-BR'));  res.type('html').send(fenixRenderSorteioCentralPage({ participants, guaranteed: raffle.guaranteed || {}, wins: raffle.wins || {} }));
 });
 
 app.post('/admin/sorteio-central/ver', fenixSimpleAdminAuth, (req, res) => {
