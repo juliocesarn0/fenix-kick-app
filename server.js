@@ -6552,6 +6552,58 @@ function fenixProcessRaffles143() {
 }
 
 
+// FENIX_VAGAS_MSG_FINAL
+app.get('/admin/sorteio-central/vagas', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
+  const nowBr = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const civilMonday = fenixMondayOfWeekFinal(nowBr);
+  const civilWeekStart = fenixDateOnlyFinal(civilMonday);
+  const civilWeekEnd = fenixDateOnlyFinal(fenixAddDaysFinal(civilMonday, 6));
+  const data = readFenixData();
+  const schedule = Array.isArray(data.schedule) ? data.schedule : [];
+  const diasNomes = { 0:'Domingo', 1:'Segunda-Feira', 2:'Ter\u00e7a-Feira', 3:'Quarta-Feira', 4:'Quinta-Feira', 5:'Sexta-Feira', 6:'S\u00e1bado' };
+  const vagas = [];
+  for (const slot of schedule) {
+    if (!slot || slot.slotDate < civilWeekStart || slot.slotDate > civilWeekEnd) continue;
+    const telas = [];
+    for (let s = 1; s <= 3; s++) {
+      const nm = String(slot['screen' + s + 'Name'] || '').trim();
+      if (!nm) telas.push('Tela ' + s);
+    }
+    if (!telas.length) continue;
+    const slotTime = fenixSlotDateTimeFinal(slot.slotDate, slot.slotHour);
+    if (slotTime <= Date.now()) continue;
+    const d = new Date(slot.slotDate + 'T12:00:00');
+    const diaNome = diasNomes[d.getDay()] || slot.slotDate;
+    const horaFim = String(Number(slot.slotHour.split(':')[0]) + 1).padStart(2,'0') + ':00';
+    vagas.push({ date: slot.slotDate, hour: slot.slotHour, horaFim, diaNome, telas });
+  }
+  vagas.sort((a, b) => (a.date + a.hour).localeCompare(b.date + b.hour));
+  const link = 'https://fenix-kick-app-production.up.railway.app/fenix/grade';
+  const cards = vagas.map((v, i) => {
+    const telasStr = v.telas.join(' e ');
+    const msg = '\ud83d\udd25 GRADE F\u00caNIX \u2014 VAGA ABERTA \ud83d\udd25\n'
+      + '\ud83d\udc26\u200d\ud83d\udd25 1 HORA DE LIVE \ud83d\udc26\u200d\ud83d\udd25\n\n'
+      + '\ud83d\udcc5 ' + v.diaNome + '\n'
+      + '\u23f0 ' + v.hour + ' \u00e0s ' + v.horaFim + '\n'
+      + '\ud83d\udda5\ufe0f ' + telasStr + '\n\n'
+      + 'Participe do sorteio: ' + link;
+    return '<div style="background:#151515;padding:14px;border-radius:8px;margin-bottom:10px;">'
+      + '<div style="margin-bottom:8px;"><b>' + v.diaNome + ' ' + v.hour + '-' + v.horaFim + '</b> \u2014 ' + telasStr + '</div>'
+      + '<textarea id="msg' + i + '" style="width:100%;background:#0a0a0a;padding:10px;border-radius:4px;font-size:12px;color:#ccc;border:1px solid #333;resize:none;" rows="8" readonly>' + msg + '</textarea>'
+      + '<button onclick="var t=document.getElementById(\'msg' + i + '\');t.select();document.execCommand(\'copy\');this.textContent=\'Copiado!\';setTimeout(()=>this.textContent=\'Copiar mensagem\',2000)" style="margin-top:6px;background:#0a7d2d;color:#fff;border:0;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:800;">Copiar mensagem</button>'
+      + '</div>';
+  }).join('');
+  const html = '<!doctype html><html><head><meta charset="utf-8"/><title>Vagas Abertas</title></head>'
+    + '<body style="background:#0d0d0d;color:#eee;font-family:system-ui;margin:0;padding:24px;">'
+    + '<div style="max-width:800px;margin:0 auto;">'
+    + '<h1>Vagas Abertas da Semana</h1>'
+    + '<p style="color:#999;">Semana ' + civilWeekStart + ' a ' + civilWeekEnd + ' \u2014 ' + vagas.length + ' vagas futuras</p>'
+    + '<a href="/admin/sorteio-central" style="color:#0a7d2d;margin-bottom:16px;display:inline-block;">\u2190 Voltar pra Central</a>'
+    + (cards || '<p style="color:#888;">Nenhuma vaga aberta no momento.</p>')
+    + '</div></body></html>';
+  res.type('html').send(html);
+});
+
 // FENIX_GRADE_FIX_URLS_FINAL
 app.get('/api/fenix/admin/fix-urls', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
   const data = readFenixData();
