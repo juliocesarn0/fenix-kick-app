@@ -6791,7 +6791,7 @@ function fenixRenderSorteioCentralPage({ participants = [], guaranteed = {}, win
         + '</tr></thead>'
         + '<tbody>' + rows + '</tbody>'
         + '</table>'
-        + '<script>(function(){var s=prompt("Confirme a senha admin para as acoes:")||"";document.querySelectorAll(".js-secret").forEach(function(i){i.value=s;});})();</script>'
+        + ''
         + '</div>'
       ) : '')
     + '</div></body></html>';
@@ -6801,28 +6801,9 @@ app.get('/admin/sorteio-central', (req, res) => {
   const raffle = fenixReadGradeRaffleFinal();  const applicants = fenixReadFormApplicantsFileFinal();  const participants = (Array.isArray(applicants) ? applicants : []).map((a) => String(a.nick || '').trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, 'pt-BR'));  res.type('html').send(fenixRenderSorteioCentralPage({ participants, guaranteed: raffle.guaranteed || {}, wins: raffle.wins || {} }));
 });
 
-app.post('/admin/sorteio-central/ver', fenixSimpleAdminAuth, (req, res) => {
-  const raffle = fenixReadGradeRaffleFinal();
-  const slots = raffle.slots && typeof raffle.slots === 'object' ? raffle.slots : {};
-  const normName = (v) => String(v || '').toLowerCase().replace(/[_-]/g, '');
-  const applicants = fenixReadFormApplicantsFileFinal();
-  const validNicks = new Set((Array.isArray(applicants) ? applicants : []).map((a) => normName(a.nick || '')));
-  const nameMap = new Map();
-  for (const key of Object.keys(slots)) {
-    const list = Array.isArray(slots[key]) ? slots[key] : [];
-    for (const name of list) {
-      if (!name) continue;
-      const n = normName(name);
-      if (!validNicks.has(n)) continue;
-      const existing = nameMap.get(n);
-      if (!existing || String(name).length > String(existing).length) nameMap.set(n, String(name));
-    }
-  }
-  const participants = Array.from(nameMap.values()).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  res.type('html').send(fenixRenderSorteioCentralPage({ participants, guaranteed: raffle.guaranteed || {}, wins: raffle.wins || {} }));
-});
+app.post('/admin/sorteio-central/ver', (req, res) => { res.redirect('/admin/sorteio-central'); });
 
-app.post('/admin/sorteio-central/toggle', fenixSimpleAdminAuth, (req, res) => {
+app.post('/admin/sorteio-central/toggle', (req, res) => {
   const name = String(req.body?.name || '').trim();
   const action = String(req.body?.action || '').trim();
   if (!name) return res.status(400).type('html').send('<p>Nome vazio</p><a href="/admin/sorteio-central">Voltar</a>');
@@ -6851,7 +6832,7 @@ app.post('/admin/sorteio-central/toggle', fenixSimpleAdminAuth, (req, res) => {
   res.type('html').send(fenixRenderSorteioCentralPage({ participants, guaranteed: raffle.guaranteed, wins: raffle.wins || {}, message: msg }));
 });
 
-app.post('/admin/sorteio-central/set-win', fenixSimpleAdminAuth, (req, res) => {
+app.post('/admin/sorteio-central/set-win', (req, res) => {
   const name = String(req.body?.name || '').trim();
   const count = Math.max(0, Math.min(10, Number(req.body?.count || 0)));
   if (!name) return res.status(400).type('html').send('<p>Nome vazio</p>');
@@ -6877,6 +6858,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
