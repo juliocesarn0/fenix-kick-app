@@ -6370,7 +6370,7 @@ function fenixRenderGradePage(req, res) {
     b.textContent = dia;
     b.style = 'padding:5px 12px;border-radius:8px;text-decoration:none;font-weight:800;font-size:12px;cursor:pointer;' + (dia === 'Todos' ? 'background:rgba(0,255,106,.14);color:#00ff6a;border:1px solid rgba(0,255,106,.6);' : 'background:#222;color:#999;border:1px solid #333;');
     b.onclick = function(e) { e.preventDefault(); filtrarDia(dia); };
-    diasDiv.appendChild(b);var b2=document.createElement("a");b2.href="/admin/sorteio-central/vagas";b2.innerHTML="&#128227; Vagas Abertas";b2.style="position:fixed;top:12px;right:220px;background:#1a5a3a;color:#fff;padding:8px 14px;border-radius:8px;text-decoration:none;font-weight:800;font-size:13px;z-index:9999;";document.body.appendChild(b2);
+    diasDiv.appendChild(b);
   });
   if (searchBox) searchBox.parentNode.insertBefore(diasDiv, searchBox);
 
@@ -6858,6 +6858,7 @@ app.listen(PORT, () => {
   console.log(`${APP_NAME} online na porta ${PORT}`);
   console.log(`URL local: http://localhost:${PORT}`);
 });
+
 
 
 
