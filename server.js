@@ -6797,7 +6797,7 @@ function fenixRenderSorteioCentralPage({ participants = [], guaranteed = {}, win
     + '<script>(function(){var p=new URLSearchParams(window.location.search);var s=p.get("adminSecret")||"";document.querySelectorAll(".js-secret").forEach(function(i){i.value=s;});})();</script></div></body></html>';
 }
 
-app.get('/admin/sorteio-central', (req, res, next) => { req.headers['x-fenix-admin'] = 'GokuuMods'; req.headers['x-fenix-admin-secret'] = String(req.query?.adminSecret || '').trim(); next(); }, requireFenixAdmin, (req, res) => {
+app.get('/admin/sorteio-central', (req, res) => {
   const raffle = fenixReadGradeRaffleFinal();  const applicants = fenixReadFormApplicantsFileFinal();  const participants = (Array.isArray(applicants) ? applicants : []).map((a) => String(a.nick || '').trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, 'pt-BR'));  res.type('html').send(fenixRenderSorteioCentralPage({ participants, guaranteed: raffle.guaranteed || {}, wins: raffle.wins || {} }));
 });
 
