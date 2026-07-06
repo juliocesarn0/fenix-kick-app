@@ -6138,7 +6138,8 @@ function fenixRenderGradePage(req, res) {
   const weeklyInfo = fenixWeeklyInfoFinal();
   const semanaParam = String(req.query?.semana || '').toLowerCase();
   const isProximaSemana = semanaParam === 'proxima';
-  const civilMonday = isProximaSemana ? fenixAddDaysFinal(fenixMondayOfWeekFinal(new Date()), 7) : fenixMondayOfWeekFinal(new Date());
+  const nowBrasilia = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const civilMonday = isProximaSemana ? fenixAddDaysFinal(fenixMondayOfWeekFinal(nowBrasilia), 7) : fenixMondayOfWeekFinal(nowBrasilia);
   const civilWeekStart = fenixDateOnlyFinal(civilMonday);
   const civilWeekEnd = fenixDateOnlyFinal(fenixAddDaysFinal(civilMonday, 6));
 
