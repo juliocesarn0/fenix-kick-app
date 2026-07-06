@@ -6598,7 +6598,7 @@ app.get('/admin/sorteio-central/vagas', (req, res) => {
     + '<div style="max-width:800px;margin:0 auto;">'
     + '<h1>Vagas Abertas da Semana</h1>'
     + '<p style="color:#999;">Semana ' + civilWeekStart + ' a ' + civilWeekEnd + ' \u2014 ' + vagas.length + ' vagas futuras</p>'
-    + '<a href="/admin/sorteio-central" style="color:#0a7d2d;margin-bottom:16px;display:inline-block;">\u2190 Voltar pra Central</a>'
+
     + (cards || '<p style="color:#888;">Nenhuma vaga aberta no momento.</p>')
     + '</div></body></html>';
   res.type('html').send(html);
