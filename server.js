@@ -5457,6 +5457,50 @@ app.post('/api/fenix/admin/extra-targets/:number', requireFenixAdmin, (req, res)
   });
 });
 
+
+// FENIX_EXTRA_TAB_SCHEDULE_ROUTES_FINAL
+app.post('/api/fenix/admin/extra-targets/:number/schedule', requireFenixAdmin, express.json(), (req, res) => {
+  const number = Number(req.params.number);
+  if (!FENIX_EXTRA_TAB_NUMBERS_FINAL.includes(number)) {
+    return res.status(400).json({ ok: false, message: 'Aba extra deve ser 4, 5 ou 6.' });
+  }
+  const name = String(req.body?.name || '').trim();
+  const start = String(req.body?.start || '').trim();
+  const end = String(req.body?.end || '').trim();
+  if (!name || !start || !end) {
+    return res.status(400).json({ ok: false, message: 'Preencha nome, inicio e fim.' });
+  }
+  const url = fenixRaffleWinnerUrl143(name);
+  const data = readFenixData();
+  data.extraTargets = data.extraTargets && typeof data.extraTargets === 'object' ? data.extraTargets : {};
+  const tab = data.extraTargets[String(number)] || {};
+  tab.schedules = Array.isArray(tab.schedules) ? tab.schedules : [];
+  tab.schedules.push({ name, url, start, end, createdAt: new Date().toISOString() });
+  tab.schedules.sort((a, b) => String(a.start).localeCompare(String(b.start)));
+  data.extraTargets[String(number)] = tab;
+  writeFenixData(data);
+  res.json({ ok: true, message: name + ' agendado de ' + start + ' ate ' + end, extraTargets: fenixGetExtraTargetsFinal(data) });
+});
+
+app.post('/api/fenix/admin/extra-targets/:number/schedule/remove', requireFenixAdmin, express.json(), (req, res) => {
+  const number = Number(req.params.number);
+  if (!FENIX_EXTRA_TAB_NUMBERS_FINAL.includes(number)) {
+    return res.status(400).json({ ok: false, message: 'Aba extra deve ser 4, 5 ou 6.' });
+  }
+  const index = Number(req.body?.index);
+  const data = readFenixData();
+  data.extraTargets = data.extraTargets && typeof data.extraTargets === 'object' ? data.extraTargets : {};
+  const tab = data.extraTargets[String(number)] || {};
+  tab.schedules = Array.isArray(tab.schedules) ? tab.schedules : [];
+  if (index >= 0 && index < tab.schedules.length) {
+    const removed = tab.schedules.splice(index, 1);
+    data.extraTargets[String(number)] = tab;
+    writeFenixData(data);
+    res.json({ ok: true, message: 'Agendamento removido.', removed: removed[0], extraTargets: fenixGetExtraTargetsFinal(data) });
+  } else {
+    res.status(400).json({ ok: false, message: 'Indice invalido.' });
+  }
+});
 app.get('/api/fenix/app/extra-target', (req, res) => {
   const data = readFenixData();
 
