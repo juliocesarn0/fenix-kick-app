@@ -5458,6 +5458,90 @@ app.post('/api/fenix/admin/extra-targets/:number', requireFenixAdmin, (req, res)
 });
 
 
+// FENIX_EXTRA_TAB_SCHEDULE_PAGE_FINAL
+app.get('/admin/abas-extras', (req, res) => {
+  const data = readFenixData();
+  const targets = fenixGetExtraTargetsFinal(data);
+  const tabsHtml = targets.map((tab) => {
+    const schedules = Array.isArray(tab.schedules) ? tab.schedules : [];
+    const rows = schedules.map((s, i) => {
+      const isActive = tab.activeSchedule && tab.activeSchedule.start === s.start && tab.activeSchedule.end === s.end;
+      const startD = s.start ? new Date(s.start) : null;
+      const endD = s.end ? new Date(s.end) : null;
+      const fmt = (d) => d ? String(d.getUTCDate()).padStart(2,"0")+"/"+String(d.getUTCMonth()+1).padStart(2,"0")+"/"+d.getUTCFullYear()+" "+String(d.getUTCHours()).padStart(2,"0")+":"+String(d.getUTCMinutes()).padStart(2,"0") : "";
+      return '<tr style="' + (isActive ? 'background:rgba(0,255,106,.08);' : '') + '">' +
+        '<td style="padding:6px 10px;border-bottom:1px solid #222;">' + (s.name || '-') + (isActive ? ' <span style="color:#00ff6a;font-weight:800;">AO VIVO</span>' : '') + '</td>' +
+        '<td style="padding:6px 10px;border-bottom:1px solid #222;">' + fmt(startD) + '</td>' +
+        '<td style="padding:6px 10px;border-bottom:1px solid #222;">' + fmt(endD) + '</td>' +
+        '<td style="padding:6px 10px;border-bottom:1px solid #222;">' +
+        '<form method="post" action="/admin/abas-extras/remove" style="display:inline;">' +
+        '<input type="hidden" name="tab" value="' + tab.number + '" />' +
+        '<input type="hidden" name="index" value="' + i + '" />' +
+        '<button type="submit" style="background:#8b0000;color:#fff;border:0;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;">Remover</button>' +
+        '</form></td></tr>';
+    }).join('');
+    const activeInfo = tab.activeSchedule
+      ? '<div style="color:#00ff6a;font-weight:800;margin-bottom:8px;">Canal ativo: ' + tab.activeSchedule.name + '</div>'
+      : (tab.enabled ? '<div style="color:#f5b22a;margin-bottom:8px;">Canal fixo: ' + tab.name + '</div>' : '<div style="color:#888;margin-bottom:8px;">Desativada</div>');
+    return '<div style="background:#151515;padding:16px;border-radius:8px;margin-bottom:16px;">' +
+      '<h2 style="color:#f5b22a;margin:0 0 8px;">Aba Extra ' + tab.number + '</h2>' +
+      activeInfo +
+      (rows ? '<table style="width:100%;border-collapse:collapse;margin-bottom:12px;">' +
+        '<thead><tr style="color:#999;text-align:left;"><th style="padding:6px 10px;border-bottom:1px solid #333;">Canal</th><th style="padding:6px 10px;border-bottom:1px solid #333;">Inicio</th><th style="padding:6px 10px;border-bottom:1px solid #333;">Fim</th><th style="padding:6px 10px;border-bottom:1px solid #333;">Acao</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table>' : '<p style="color:#888;">Nenhum agendamento.</p>') +
+      '<form method="post" action="/admin/abas-extras/add" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">' +
+      '<input type="hidden" name="tab" value="' + tab.number + '" />' +
+      '<div><label style="display:block;color:#bbb;font-size:12px;">Canal</label><input name="name" required style="padding:6px;background:#0a0a0a;color:#fff;border:1px solid #333;border-radius:4px;" /></div>' +
+      '<div><label style="display:block;color:#bbb;font-size:12px;">Inicio</label><input name="start" type="datetime-local" required style="padding:6px;background:#0a0a0a;color:#fff;border:1px solid #333;border-radius:4px;" /></div>' +
+      '<div><label style="display:block;color:#bbb;font-size:12px;">Fim</label><input name="end" type="datetime-local" required style="padding:6px;background:#0a0a0a;color:#fff;border:1px solid #333;border-radius:4px;" /></div>' +
+      '<button type="submit" style="background:#0a7d2d;color:#fff;border:0;padding:8px 14px;border-radius:4px;cursor:pointer;font-weight:800;">Adicionar</button>' +
+      '</form></div>';
+  }).join('');
+  res.type('html').send('<!doctype html><html><head><meta charset="utf-8"/><title>Abas Extras - Fenix</title><meta name="viewport" content="width=device-width,initial-scale=1"/></head>' +
+    '<body style="background:#0d0d0d;color:#eee;font-family:system-ui;margin:0;padding:24px;">' +
+    '<div style="max-width:900px;margin:0 auto;">' +
+    '<h1 style="margin:0 0 8px;">Agendamento de Abas Extras</h1>' +
+    '<p style="color:#999;margin:0 0 20px;">Agende canais por horario nas abas 4, 5 e 6. O canal ativo troca automaticamente.</p>' +
+    tabsHtml +
+    '</div></body></html>');
+});
+
+app.post('/admin/abas-extras/add', express.urlencoded({ extended: true }), (req, res) => {
+  const tab = Number(req.body?.tab);
+  const name = String(req.body?.name || '').trim();
+  const startLocal = String(req.body?.start || '').trim();
+  const endLocal = String(req.body?.end || '').trim();
+  if (!name || !startLocal || !endLocal || !FENIX_EXTRA_TAB_NUMBERS_FINAL.includes(tab)) return res.redirect('/admin/abas-extras');
+  const start = new Date(startLocal).toISOString();
+  const end = new Date(endLocal).toISOString();
+  const url = fenixRaffleWinnerUrl143(name);
+  const data = readFenixData();
+  data.extraTargets = data.extraTargets && typeof data.extraTargets === 'object' ? data.extraTargets : {};
+  const tabData = data.extraTargets[String(tab)] || {};
+  tabData.schedules = Array.isArray(tabData.schedules) ? tabData.schedules : [];
+  tabData.schedules.push({ name, url, start, end, createdAt: new Date().toISOString() });
+  tabData.schedules.sort((a, b) => String(a.start).localeCompare(String(b.start)));
+  data.extraTargets[String(tab)] = tabData;
+  writeFenixData(data);
+  res.redirect('/admin/abas-extras');
+});
+
+app.post('/admin/abas-extras/remove', express.urlencoded({ extended: true }), (req, res) => {
+  const tab = Number(req.body?.tab);
+  const index = Number(req.body?.index);
+  if (!FENIX_EXTRA_TAB_NUMBERS_FINAL.includes(tab)) return res.redirect('/admin/abas-extras');
+  const data = readFenixData();
+  data.extraTargets = data.extraTargets && typeof data.extraTargets === 'object' ? data.extraTargets : {};
+  const tabData = data.extraTargets[String(tab)] || {};
+  tabData.schedules = Array.isArray(tabData.schedules) ? tabData.schedules : [];
+  if (index >= 0 && index < tabData.schedules.length) {
+    tabData.schedules.splice(index, 1);
+    data.extraTargets[String(tab)] = tabData;
+    writeFenixData(data);
+  }
+  res.redirect('/admin/abas-extras');
+});
+
 // FENIX_EXTRA_TAB_SCHEDULE_ROUTES_FINAL
 app.post('/api/fenix/admin/extra-targets/:number/schedule', requireFenixAdmin, express.json(), (req, res) => {
   const number = Number(req.params.number);
