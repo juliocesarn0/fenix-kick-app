@@ -1117,18 +1117,26 @@ function fenixBuildKickUrlFinal(value) {
 const FENIX_EXTRA_TAB_NUMBERS_FINAL = [4, 5, 6];
 
 function fenixNormalizeExtraTargetFinal(number, value) {
-  const extra = value && typeof value === "object" ? value : {};
-  const name = String(extra.name || extra.channel || "").trim();
-  const url = String(extra.url || fenixBuildKickUrlFinal(name)).trim();
-  const enabled = Boolean(extra.enabled && url);
-
+  const extra = value && typeof value === 'object' ? value : {};
+  const schedules = Array.isArray(extra.schedules) ? extra.schedules : [];
+  const nowBr = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const nowISO = nowBr.toISOString();
+  let activeSched = null;
+  for (const s of schedules) {
+    if (s.start && s.end && nowISO >= s.start && nowISO < s.end) { activeSched = s; break; }
+  }
+  const baseName = String(extra.name || extra.channel || '').trim();
+  const name = activeSched ? String(activeSched.name || '').trim() : baseName;
+  const baseUrl = String(extra.url || fenixBuildKickUrlFinal(baseName)).trim();
+  const url = activeSched ? String(activeSched.url || fenixBuildKickUrlFinal(name)).trim() : baseUrl;
+  const enabled = activeSched ? Boolean(name && url) : Boolean(extra.enabled && url);
   return {
-    number,
-    enabled,
-    name,
-    url: enabled ? url : "",
-    updatedAt: extra.updatedAt || "",
-    updatedBy: extra.updatedBy || ""
+    number, enabled, name,
+    url: enabled ? url : '',
+    updatedAt: extra.updatedAt || '',
+    updatedBy: extra.updatedBy || '',
+    schedules,
+    activeSchedule: activeSched || null
   };
 }
 
