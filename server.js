@@ -1159,12 +1159,14 @@ function fenixSetExtraTargetFinal(data, number, payload, updatedBy) {
   const url = String(payload?.url || fenixBuildKickUrlFinal(name)).trim();
   const enabled = Boolean(payload?.enabled) && Boolean(url);
 
+  const existingTarget = data.extraTargets[String(tabNumber)] || {};
   const saved = {
     enabled,
     name,
     url: enabled ? url : "",
     updatedAt: new Date().toISOString(),
-    updatedBy: String(updatedBy || FENIX_ADMIN_USER)
+    updatedBy: String(updatedBy || FENIX_ADMIN_USER),
+    schedules: Array.isArray(existingTarget.schedules) ? existingTarget.schedules : []
   };
 
   data.extraTargets[String(tabNumber)] = saved;
