@@ -6858,7 +6858,7 @@ setInterval(() => {
 
 // FENIX_SORTEIO_CENTRAL_PAGE
 // FENIX_SORTEIO_CENTRAL_PAGE
-function fenixRenderSorteioCentralPage({ participants = [], guaranteed = {}, wins = {}, message = '' } = {}) {
+function fenixRenderSorteioCentralPage({ participants = [], guaranteed = {}, wins = {}, message = '', adminSecret = '' } = {}) {
   const rows = participants.map((name) => {
     const key = String(name).toLowerCase();
     const isGuar = !!guaranteed[key];
@@ -6877,19 +6877,19 @@ function fenixRenderSorteioCentralPage({ participants = [], guaranteed = {}, win
       + '<td style="padding:6px 10px;border-bottom:1px solid #222;text-align:center;"><span style="color:' + weightColor + ';font-weight:800;">' + weight + '</span></td>'
       + '<td style="padding:6px 10px;border-bottom:1px solid #222;">'
       + '<form method="post" action="/admin/sorteio-central/toggle" style="display:inline;margin-right:4px;">'
-      + '<input type="hidden" name="adminSecret" value="" class="js-secret" />'
+      + '<input type="hidden" name="adminSecret" value="' + String(adminSecret || '').replace(/"/g, '&quot;') + '" class="js-secret" />'
       + '<input type="hidden" name="name" value="' + name + '" />'
       + '<input type="hidden" name="action" value="' + action + '" />'
       + '<button type="submit" style="background:#222;color:#fff;border:1px solid #444;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:12px;">' + label + '</button>'
       + '</form>'
       + '<form method="post" action="/admin/sorteio-central/set-win" style="display:inline;">'
-      + '<input type="hidden" name="adminSecret" value="" class="js-secret" />'
+      + '<input type="hidden" name="adminSecret" value="' + String(adminSecret || '').replace(/"/g, '&quot;') + '" class="js-secret" />'
       + '<input type="hidden" name="name" value="' + name + '" />'
       + '<input type="hidden" name="count" value="' + Math.max(0, winCount - 1) + '" />'
       + '<button type="submit" style="background:#1a1a1a;color:#f5b22a;border:1px solid #444;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:12px;" title="Diminuir vitoria">-</button>'
       + '</form>'
       + '<form method="post" action="/admin/sorteio-central/set-win" style="display:inline;margin-left:2px;">'
-      + '<input type="hidden" name="adminSecret" value="" class="js-secret" />'
+      + '<input type="hidden" name="adminSecret" value="' + String(adminSecret || '').replace(/"/g, '&quot;') + '" class="js-secret" />'
       + '<input type="hidden" name="name" value="' + name + '" />'
       + '<input type="hidden" name="count" value="' + (winCount + 1) + '" />'
       + '<button type="submit" style="background:#1a1a1a;color:#00ff6a;border:1px solid #444;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:12px;" title="Aumentar vitoria">+</button>'
@@ -6933,14 +6933,20 @@ function fenixRenderSorteioCentralPage({ participants = [], guaranteed = {}, win
         + ''
         + '</div>'
       ) : '')
-    + '<script>(function(){var p=new URLSearchParams(window.location.search);var s=p.get("adminSecret")||"";document.querySelectorAll(".js-secret").forEach(function(i){i.value=s;});})();</script></div></body></html>';
+    + '</div></body></html>';
 }
 
 app.get('/admin/sorteio-central', (req, res) => {
-  const raffle = fenixReadGradeRaffleFinal();  const applicants = fenixReadFormApplicantsFileFinal();  const participants = (Array.isArray(applicants) ? applicants : []).map((a) => String(a.nick || '').trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, 'pt-BR'));  res.type('html').send(fenixRenderSorteioCentralPage({ participants, guaranteed: raffle.guaranteed || {}, wins: raffle.wins || {} }));
+  res.type('html').send(fenixRenderSorteioCentralPage({}));
 });
 
-app.post('/admin/sorteio-central/ver', (req, res) => { res.redirect('/admin/sorteio-central'); });
+app.post('/admin/sorteio-central/ver', fenixSimpleAdminAuth, (req, res) => {
+  const raffle = fenixReadGradeRaffleFinal();
+  const applicants = fenixReadFormApplicantsFileFinal();
+  const participants = (Array.isArray(applicants) ? applicants : []).map((a) => String(a.nick || '').trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const adminSecret = String(req.body?.adminSecret || '').trim();
+  res.type('html').send(fenixRenderSorteioCentralPage({ participants, guaranteed: raffle.guaranteed || {}, wins: raffle.wins || {}, adminSecret }));
+});
 
 app.post('/admin/sorteio-central/toggle', fenixSimpleAdminAuth, (req, res) => {
   const name = String(req.body?.name || '').trim();
@@ -6968,7 +6974,7 @@ app.post('/admin/sorteio-central/toggle', fenixSimpleAdminAuth, (req, res) => {
     ? '"' + name + '" marcado como GARANTIDO.'
     : '"' + name + '" removido dos garantidos.';
 
-  res.type('html').send(fenixRenderSorteioCentralPage({ participants, guaranteed: raffle.guaranteed, wins: raffle.wins || {}, message: msg }));
+  res.type('html').send(fenixRenderSorteioCentralPage({ participants, guaranteed: raffle.guaranteed, wins: raffle.wins || {}, message: msg, adminSecret: String(req.body?.adminSecret || '').trim() }));
 });
 
 app.post('/admin/sorteio-central/set-win', fenixSimpleAdminAuth, (req, res) => {
@@ -6990,7 +6996,7 @@ app.post('/admin/sorteio-central/set-win', fenixSimpleAdminAuth, (req, res) => {
   const participants = Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
   const peso = Math.max(1, 3 - count);
   const msg = name + ' - vitorias: ' + count + ' (peso: ' + peso + ')';
-  res.type('html').send(fenixRenderSorteioCentralPage({ participants, guaranteed: raffle.guaranteed || {}, wins: raffle.wins, message: msg }));
+  res.type('html').send(fenixRenderSorteioCentralPage({ participants, guaranteed: raffle.guaranteed || {}, wins: raffle.wins, message: msg, adminSecret: String(req.body?.adminSecret || '').trim() }));
 });
 
 app.listen(PORT, () => {
