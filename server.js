@@ -1129,7 +1129,8 @@ function fenixNormalizeExtraTargetFinal(number, value) {
   const name = activeSched ? String(activeSched.name || '').trim() : baseName;
   const baseUrl = String(extra.url || fenixBuildKickUrlFinal(baseName)).trim();
   const url = activeSched ? String(activeSched.url || fenixBuildKickUrlFinal(name)).trim() : baseUrl;
-  const manualUpdatedAt = String(extra.updatedAt || '');
+  const manualUpdatedAtRaw = extra.updatedAt ? new Date(extra.updatedAt) : null;
+  const manualUpdatedAt = manualUpdatedAtRaw ? new Date(manualUpdatedAtRaw.getTime() - 3 * 60 * 60 * 1000).toISOString() : '';
   const hasStartedAfterManual = schedules.some((s) => s.start && nowISO >= s.start && (!manualUpdatedAt || s.start > manualUpdatedAt));
   const enabled = activeSched ? Boolean(name && url) : (hasStartedAfterManual ? false : Boolean(extra.enabled && url));
   return {
