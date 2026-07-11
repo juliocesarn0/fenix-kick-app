@@ -1129,8 +1129,8 @@ function fenixNormalizeExtraTargetFinal(number, value) {
   const name = activeSched ? String(activeSched.name || '').trim() : baseName;
   const baseUrl = String(extra.url || fenixBuildKickUrlFinal(baseName)).trim();
   const url = activeSched ? String(activeSched.url || fenixBuildKickUrlFinal(name)).trim() : baseUrl;
-  const hasSchedules = schedules.length > 0;
-  const enabled = activeSched ? Boolean(name && url) : Boolean(extra.enabled && url);
+  const hasStartedAny = schedules.some((s) => s.start && nowISO >= s.start);
+  const enabled = activeSched ? Boolean(name && url) : (hasStartedAny ? false : Boolean(extra.enabled && url));
   return {
     number, enabled, name,
     url: enabled ? url : '',
